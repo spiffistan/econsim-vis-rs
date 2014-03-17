@@ -5,7 +5,7 @@
 extern crate glfw = "glfw-rs";
 extern crate gl;
 extern crate native;
-// extern crate cgmath;
+extern crate cgmath;
 
 use std::cast;
 use std::ptr;
@@ -13,6 +13,12 @@ use std::str;
 use std::mem;
 use std::vec;
 use std::io::File;
+
+use cgmath::matrix::*;
+use cgmath::vector::*;
+use cgmath::ptr::*;
+use cgmath::angle::*;
+use cgmath::projection::*;
 
 use gl::types::*;
 
@@ -24,51 +30,6 @@ static MAP_SIZE: uint = MAP_W * MAP_H;
 // Shader sources
 static VS_SRC: &'static str = "test.vert";
 static FS_SRC: &'static str = "test.frag";
-
-
-// Since cgmath doesn't compile yet...
-#[deriving(Eq, Clone)]
-pub struct Vec3 {
-  x: GLfloat,
-  y: GLfloat,
-  z: GLfloat
-}
-
-impl Vec3 {
-
-  pub fn new(x: GLfloat, y: GLfloat, z: GLfloat) -> Vec3 {
-    Vec3 { x: x, y: y, z: z }
-  }
-
-  pub fn cross(&self, other: &Vec3) -> Vec3 {
-    Vec3::new(
-      (self.y * other.z) - (self.z * other.y),
-      (self.z * other.x) - (self.x * other.z),
-      (self.x * other.y) - (self.y * other.x)
-    )
-  }
-
-  pub fn dot(&self) -> GLfloat {
-    self.x * self.x + self.y * self.y + self.z * self.z
-  }
-
-  pub fn normalize(&self) -> Vec3 {
-    let len = std::f32::sqrt(self.dot());
-    return Vec3::new(self.x / len, self.y / len, self.z / len);
-  }
-}
-
-impl Add<Vec3, Vec3> for Vec3 {
-  fn add(&self, other: &Vec3) -> Vec3 {
-    Vec3::new(self.x + other.x, self.y + other.y, self.z + other.z)
-  }
-}
-
-impl Sub<Vec3, Vec3> for Vec3 {
-  fn sub(&self, other: &Vec3) -> Vec3 {
-    Vec3::new(self.x - other.x, self.y - other.y, self.z - other.z)
-  }
-}
 
 #[start]
 fn start(argc: int, argv: **u8) -> int {
@@ -83,24 +44,21 @@ fn load_heightmap() -> ~[u8] {
   }
 }
 
-fn initialize_vertices(heightmap: ~[u8]) -> ~[Vec3] {
-  let mut vertices: ~[Vec3] = ~[];
+fn initialize_vertices(heightmap: ~[u8]) -> ~[Vec3<GLfloat>] {
+  let mut vertices: ~[Vec3<GLfloat>] = ~[];
   let mut i = 0;
 
   for x in range(0, MAP_W) {
     for y in range(0, MAP_H) {
       let v = Vec3::new(x as GLfloat, y as GLfloat, heightmap[(y * MAP_W) + x] as GLfloat);
       vertices.push(v);
-      // vertices.push(x as GLfloat);
-      // vertices.push(y as GLfloat);
-      // vertices.push(heightmap[(y * MAP_W) + x] as GLfloat);
     }
   }
   vertices
 }
 
-fn initialize_normals(v: ~[Vec3]) -> ~[Vec3] {
-  let mut normals: ~[Vec3] = ~[];
+fn initialize_normals(v: ~[Vec3<GLfloat>]) -> ~[Vec3<GLfloat>] {
+  let mut normals: ~[Vec3<GLfloat>] = ~[];
 
   for row in range(0, MAP_W-1) {
     for col in range(0, MAP_H-1) {
