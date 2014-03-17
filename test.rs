@@ -23,9 +23,14 @@ use cgmath::projection::*;
 use gl::types::*;
 
 static MAP_SRC: &'static str = "elevation.data";
-static MAP_W: uint = 2048;
-static MAP_H: uint = 2048;
+static MAP_W: uint = 5;
+static MAP_H: uint = 5;
 static MAP_SIZE: uint = MAP_W * MAP_H;
+
+static SCALE:   f32 = 10.0;
+static SCALE_X: f32 = SCALE;
+static SCALE_Y: f32 = SCALE;
+static SCALE_Z: f32 = SCALE;
 
 // Shader sources
 static VS_SRC: &'static str = "test.vert";
@@ -40,18 +45,57 @@ fn load_heightmap() -> ~[u8] {
   let p = std::os::getcwd().join(Path::new(MAP_SRC));
   match File::open(&p).read_bytes(MAP_SIZE) {
     Ok(res) => return res,
-    Err(_) => fail!()
+    Err(_) => fail!("Could not load heightmap!")
   }
 }
+
+// fn initialize_indices() -> ~[Vec3<GLfloat>] {
+//   let mut indices: ~[Vec3<GLfloat>] = ~[];
+//   let mut i = 0;
+//
+//   for row in range(0, MAP_W-1) {
+//     for col in range(0, MAP_H-1) {
+//
+//       let i0 = row * MAP_W + col;
+//       let i1 = i0 + MAP_H;
+//
+//       indices.push_all(~[
+//         i0   as f32,
+//         i0+1 as f32,
+//         i1   as f32,
+//         i1   as f32,
+//         i1+1 as f32,
+//         i0+1 as f32
+//       ]);
+//     }
+//   }
+//   indices
+// }
 
 fn initialize_vertices(heightmap: ~[u8]) -> ~[Vec3<GLfloat>] {
   let mut vertices: ~[Vec3<GLfloat>] = ~[];
   let mut i = 0;
 
-  for x in range(0, MAP_W) {
-    for y in range(0, MAP_H) {
-      let v = Vec3::new(x as GLfloat, y as GLfloat, heightmap[(y * MAP_W) + x] as GLfloat);
-      vertices.push(v);
+  for x in range(0, MAP_W-1) {
+    for y in range(0, MAP_H-1) {
+
+      let xi = x   as f32 / SCALE_X;
+      let yi = y   as f32 / SCALE_Y;
+      let zi = heightmap[x * MAP_W + y] as f32 / SCALE_Z;
+
+      // Triangle 1
+      vertices.push(Vec3::new(xi    , yi    , zi));
+      vertices.push(Vec3::new(xi    , yi+1.0, zi));
+      vertices.push(Vec3::new(xi+1.0, yi    , zi));
+
+      // Triangle 2
+      vertices.push(Vec3::new(xi    , yi+1.0, zi));
+      vertices.push(Vec3::new(xi+1.0, yi    , zi));
+      vertices.push(Vec3::new(xi+1.0, yi+1.0, zi));
+
+      println!("grid ({}, {}):", x, y);
+      println!("   | v1 ({}, {}, {}):", xi, yi, zi);
+
     }
   }
   vertices
@@ -90,24 +134,6 @@ fn initialize_normals(v: ~[Vec3<GLfloat>]) -> ~[Vec3<GLfloat>] {
   }
   normals
 }
-//
-//     VecMat normals( hm );
-//     for( int col = 0; col < hm.cols(); ++col )
-//         for( int row = 0; row < hm.rows(); ++row )
-//         {
-//             Vector3f sum( Vector3f::Zero() );
-//             const Vector3f& cur = hm( row, col );
-//             if( row+1 < hm.rows() && col+1 < hm.cols() )
-//                 sum += ( hm( row+0, col+1 ) - cur ).cross( hm( row+1, col+0 ) - cur ).normalized();
-//             if( row+1 < hm.rows() && col > 0 )
-//                 sum += ( hm( row+1, col+0 ) - cur ).cross( hm( row+0, col-1 ) - cur ).normalized();
-//             if( row > 0 && col > 0 )
-//                 sum += ( hm( row+0, col-1 ) - cur ).cross( hm( row-1, col+0 ) - cur ).normalized();
-//             if( row > 0 && col+1 < hm.cols() )
-//                 sum += ( hm( row-1, col+0 ) - cur ).cross( hm( row+0, col+1 ) - cur ).normalized();
-//             normals( row, col ) = sum.normalized();
-//         }
-//     return normals;
 
 // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
@@ -169,13 +195,14 @@ fn main() {
   let vs_src = load_shader_file(VS_SRC);
   let fs_src = load_shader_file(FS_SRC);
 
-  let mut heightmap: ~[u8] = ~[0u8, ..(MAP_SIZE * 3)];
+  let mut heightmap: ~[u8] = load_heightmap();
   let vertices = initialize_vertices(heightmap);
   let normals  = initialize_normals(vertices.clone());
 
   glfw::set_error_callback(~ErrorContext);
 
   glfw::start(proc() {
+
     // Choose a GL profile that is compatible with OS X 10.7+
     glfw::window_hint::context_version(3, 2);
     glfw::window_hint::opengl_profile(glfw::OpenGlCoreProfile);
@@ -193,30 +220,44 @@ fn main() {
     let program = link_program(vs, fs);
 
     let mut vao = 0;
-    let mut vbo = 0;
+    let mut vbo_1 = 0;
+    let mut vbo_2 = 0;
 
     unsafe {
-      // Create Vertex Array Object
+
+      // Create Vertex Array Object and Vertex Buffer Objects
       gl::GenVertexArrays(1, &mut vao);
+      gl::GenBuffers(1, &mut vbo_1);
+      gl::GenBuffers(1, &mut vbo_2);
+
       gl::BindVertexArray(vao);
 
-      // Create a Vertex Buffer Object and copy the vertex data to it
-      gl::GenBuffers(1, &mut vbo);
-      gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+      // Create Vertex Buffer Object 1 for the vertex position data
+      gl::BindBuffer(gl::ARRAY_BUFFER, vbo_1);
       gl::BufferData(gl::ARRAY_BUFFER,
-                     (vertices.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
+                     (vertices.len() * mem::size_of::<Vec3<GLfloat>>()) as GLsizeiptr,
                      cast::transmute(&vertices[0]),
                      gl::STATIC_DRAW);
+
+      // Create Vertex Buffer Object 1 for the vertex position normals
+      // gl::BindBuffer(gl::ARRAY_BUFFER, vbo_2);
+      // gl::BufferData(gl::ARRAY_BUFFER,
+      //                (normals.len() * mem::size_of::<Vec3<GLfloat>>()) as GLsizeiptr,
+      //                cast::transmute(&normals[0]),
+      //                gl::STATIC_DRAW);
 
       // Use shader program
       gl::UseProgram(program);
       "out_color".with_c_str(|ptr| gl::BindFragDataLocation(program, 0, ptr));
 
-      // Specify the layout of the vertex data
       let pos_attr = "position".with_c_str(|ptr| gl::GetAttribLocation(program, ptr));
+      //let nrm_attr = "normal".with_c_str(|ptr| gl::GetAttribLocation(program, ptr));
 
       gl::EnableVertexAttribArray(pos_attr as GLuint);
+      //gl::EnableVertexAttribArray(nrm_attr as GLuint);
       gl::VertexAttribPointer(pos_attr as GLuint, 3, gl::FLOAT, gl::FALSE as GLboolean, 0, ptr::null());
+      //gl::VertexAttribPointer(nrm_attr as GLuint, 3, gl::FLOAT, gl::FALSE as GLboolean, 0, ptr::null());
+
     }
 
     while !window.should_close() {
@@ -228,7 +269,7 @@ fn main() {
       gl::Clear(gl::COLOR_BUFFER_BIT);
 
       // Draw a triangle from the 3 vertices
-      gl::DrawArrays(gl::TRIANGLES, 0, (MAP_SIZE * 3) as i32);
+      gl::DrawArrays(gl::LINE_LOOP, 0, vertices.len() as GLint);
 
       // Swap buffers
       window.swap_buffers();
@@ -239,7 +280,8 @@ fn main() {
     gl::DeleteShader(fs);
     gl::DeleteShader(vs);
     unsafe {
-      gl::DeleteBuffers(1, &vbo);
+      gl::DeleteBuffers(1, &vbo_1);
+      gl::DeleteBuffers(1, &vbo_2);
       gl::DeleteVertexArrays(1, &vao);
     }
   });
