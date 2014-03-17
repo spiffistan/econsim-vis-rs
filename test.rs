@@ -40,17 +40,11 @@ impl Vec3 {
   }
 
   pub fn cross(&self, other: &Vec3) -> Vec3 {
-    Vec3::new((self.y * other.z) - (self.z * other.y),
-              (self.z * other.x) - (self.x * other.z),
-              (self.x * other.y) - (self.y * other.x))
-  }
-
-  pub fn add(&self, other: &Vec3) -> Vec3 {
-    Vec3::new(self.x + other.x, self.y + other.y, self.z + other.z)
-  }
-
-  pub fn sub(&self, other: &Vec3) -> Vec3 {
-    Vec3::new(self.x - other.x, self.y - other.y, self.z - other.z)
+    Vec3::new(
+      (self.y * other.z) - (self.z * other.y),
+      (self.z * other.x) - (self.x * other.z),
+      (self.x * other.y) - (self.y * other.x)
+    )
   }
 
   pub fn dot(&self) -> GLfloat {
@@ -61,9 +55,19 @@ impl Vec3 {
     let len = std::f32::sqrt(self.dot());
     return Vec3::new(self.x / len, self.y / len, self.z / len);
   }
-
 }
 
+impl Add<Vec3, Vec3> for Vec3 {
+  fn add(&self, other: &Vec3) -> Vec3 {
+    Vec3::new(self.x + other.x, self.y + other.y, self.z + other.z)
+  }
+}
+
+impl Sub<Vec3, Vec3> for Vec3 {
+  fn sub(&self, other: &Vec3) -> Vec3 {
+    Vec3::new(self.x - other.x, self.y - other.y, self.z - other.z)
+  }
+}
 
 #[start]
 fn start(argc: int, argv: **u8) -> int {
@@ -103,31 +107,26 @@ fn initialize_normals(v: ~[Vec3]) -> ~[Vec3] {
       let hr = MAP_W * row;
       let hc = col;
 
-      let sum = Vec3::new(0f32, 0f32, 0f32);
+      let mut sum = Vec3::new(0f32, 0f32, 0f32);
       let cur = v[hr+hc];
 
       if row+1 < MAP_W && col+1 < MAP_H {
-        let vec = (v[hr+0 + hc+1].sub(&cur)).cross(&v[hr+1 + hc+0].sub(&cur)).normalize();
-        sum.add(&vec);
+        sum = sum + (v[hr+0 + hc+1] - cur).cross(&(v[hr+1 + hc+0] - cur)).normalize();
       }
 
       if row+1 < MAP_W && col > 0 {
-        let vec = (v[hr+1 + hc+0].sub(&cur)).cross(&v[hr+0 + hc+1].sub(&cur)).normalize();
-        sum.add(&vec);
+        sum = sum + (v[hr+1 + hc+0] - cur).cross(&(v[hr+0 + hc+1] - cur)).normalize();
       }
 
       if row > 0 && col > 0 {
-        let vec = (v[hr+0 + hc+1].sub(&cur)).cross(&v[hr+1 + hc+0].sub(&cur)).normalize();
-        sum.add(&vec);
+        sum = sum + (v[hr+0 + hc+1] - cur).cross(&(v[hr+1 + hc+0] - cur)).normalize();
       }
 
       if row > 0 && col+1 < MAP_H {
-        let vec = (v[hr+1 + hc+0].sub(&cur)).cross(&v[hr+0 + hc+1].sub(&cur)).normalize();
-        sum.add(&vec);
+        sum = sum + (v[hr+1 + hc+0] - cur).cross(&(v[hr+0 + hc+1] - cur)).normalize();
       }
 
       normals.push(sum.normalize());
-
     }
   }
   normals
