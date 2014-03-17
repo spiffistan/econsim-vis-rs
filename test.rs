@@ -27,7 +27,8 @@ static FS_SRC: &'static str = "test.frag";
 
 
 // Since cgmath doesn't compile yet...
-struct Vec3 {
+#[deriving(Eq, Clone)]
+pub struct Vec3 {
   x: GLfloat,
   y: GLfloat,
   z: GLfloat
@@ -101,8 +102,8 @@ fn initialize_vertices(heightmap: ~[u8]) -> ~[Vec3] {
 fn initialize_normals(v: ~[Vec3]) -> ~[Vec3] {
   let mut normals: ~[Vec3] = ~[];
 
-  for row in range(0, MAP_W) {
-    for col in range(0, MAP_H) {
+  for row in range(0, MAP_W-1) {
+    for col in range(0, MAP_H-1) {
 
       let hr = MAP_W * row;
       let hc = col;
@@ -211,8 +212,8 @@ fn main() {
   let fs_src = load_shader_file(FS_SRC);
 
   let mut heightmap: ~[u8] = ~[0u8, ..(MAP_SIZE * 3)];
-  let mut normals:  ~[GLfloat] = ~[];
-  let mut vertices = initialize_vertices(heightmap);
+  let vertices = initialize_vertices(heightmap);
+  let normals  = initialize_normals(vertices.clone());
 
   glfw::set_error_callback(~ErrorContext);
 
