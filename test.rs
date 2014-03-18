@@ -23,14 +23,14 @@ use cgmath::projection::*;
 use gl::types::*;
 
 static MAP_SRC: &'static str = "elevation.data";
-static MAP_W: uint = 5;
-static MAP_H: uint = 5;
+static MAP_W: uint = 2048;
+static MAP_H: uint = 2048;
 static MAP_SIZE: uint = MAP_W * MAP_H;
 
-static SCALE:   f32 = 1.0;
+static SCALE:   f32 = 2048f32;
 static SCALE_X: f32 = SCALE;
 static SCALE_Y: f32 = SCALE;
-static SCALE_Z: f32 = SCALE;
+static SCALE_Z: f32 = 1.0;
 
 // Shader sources
 static VS_SRC: &'static str = "test.vert";
@@ -83,22 +83,25 @@ fn initialize_vertices(heightmap: ~[u8]) -> ~[Vec3<GLfloat>] {
       let yi = y as f32 / SCALE_Y;
       let zi = heightmap[x * MAP_W + y] as f32 / SCALE_Z;
 
+      let sx = 1.0f32 / SCALE_X; // Step x
+      let sy = 1.0f32 / SCALE_Y; // Step y
+
       let pos: [(f32, f32, f32), ..6] = [
-        (xi    , yi    , zi),
-        (xi    , yi+1.0, zi),
-        (xi+1.0, yi    , zi),
-        (xi    , yi+1.0, zi),
-        (xi+1.0, yi    , zi),
-        (xi+1.0, yi+1.0, zi)
+        (xi   , yi   , zi),
+        (xi   , yi+sy, zi),
+        (xi+sx, yi   , zi),
+        (xi   , yi+sy, zi),
+        (xi+sx, yi   , zi),
+        (xi+sx, yi+sy, zi)
       ];
 
-      println!("grid: ({}, {}, {})", xi, yi, zi);
+      //println!("grid: ({}, {}, {})", xi, yi, zi);
 
       for tup in pos.iter() {
         let (x, y, z) = *tup;
         let v = Vec3::new(x as GLfloat, y as GLfloat, z as GLfloat);
         vertices.push(v);
-        println!("  {}", v);
+        // if z > 0.0 { println!("  {}", v); }
       }
     }
   }
@@ -201,7 +204,7 @@ fn main() {
 
   let mut heightmap: ~[u8] = load_heightmap();
   let vertices = initialize_vertices(heightmap);
-  let normals  = initialize_normals(vertices.clone());
+  //let normals  = initialize_normals(vertices.clone());
 
   glfw::set_error_callback(~ErrorContext);
 
@@ -257,7 +260,7 @@ fn main() {
 
       gl::EnableVertexAttribArray(pos_attr as GLuint);
       //gl::EnableVertexAttribArray(nrm_attr as GLuint);
-      gl::VertexAttribPointer(pos_attr as GLuint, 3, gl::FLOAT, gl::FALSE, (3 * mem::size_of::<Vec3<GLfloat>>()) as GLint, ptr::null());
+      gl::VertexAttribPointer(pos_attr as GLuint, 3, gl::FLOAT, gl::FALSE, 0, ptr::null());
       //gl::VertexAttribPointer(nrm_attr as GLuint, 3, gl::FLOAT, gl::FALSE as GLboolean, 0, ptr::null());
 
     }
