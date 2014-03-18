@@ -27,7 +27,7 @@ static MAP_W: uint = 5;
 static MAP_H: uint = 5;
 static MAP_SIZE: uint = MAP_W * MAP_H;
 
-static SCALE:   f32 = 10.0;
+static SCALE:   f32 = 1.0;
 static SCALE_X: f32 = SCALE;
 static SCALE_Y: f32 = SCALE;
 static SCALE_Z: f32 = SCALE;
@@ -79,23 +79,27 @@ fn initialize_vertices(heightmap: ~[u8]) -> ~[Vec3<GLfloat>] {
   for x in range(0, MAP_W-1) {
     for y in range(0, MAP_H-1) {
 
-      let xi = x   as f32 / SCALE_X;
-      let yi = y   as f32 / SCALE_Y;
+      let xi = x as f32 / SCALE_X;
+      let yi = y as f32 / SCALE_Y;
       let zi = heightmap[x * MAP_W + y] as f32 / SCALE_Z;
 
-      // Triangle 1
-      vertices.push(Vec3::new(xi    , yi    , zi));
-      vertices.push(Vec3::new(xi    , yi+1.0, zi));
-      vertices.push(Vec3::new(xi+1.0, yi    , zi));
+      let pos: [(f32, f32, f32), ..6] = [
+        (xi    , yi    , zi),
+        (xi    , yi+1.0, zi),
+        (xi+1.0, yi    , zi),
+        (xi    , yi+1.0, zi),
+        (xi+1.0, yi    , zi),
+        (xi+1.0, yi+1.0, zi)
+      ];
 
-      // Triangle 2
-      vertices.push(Vec3::new(xi    , yi+1.0, zi));
-      vertices.push(Vec3::new(xi+1.0, yi    , zi));
-      vertices.push(Vec3::new(xi+1.0, yi+1.0, zi));
+      println!("grid: ({}, {}, {})", xi, yi, zi);
 
-      println!("grid ({}, {}):", x, y);
-      println!("   | v1 ({}, {}, {}):", xi, yi, zi);
-
+      for tup in pos.iter() {
+        let (x, y, z) = *tup;
+        let v = Vec3::new(x as GLfloat, y as GLfloat, z as GLfloat);
+        vertices.push(v);
+        println!("  {}", v);
+      }
     }
   }
   vertices
@@ -215,31 +219,29 @@ fn main() {
     gl::load_with(glfw::get_proc_address);
 
     // Create GLSL shaders
-    let vs = compile_shader(vs_src, gl::VERTEX_SHADER);
-    let fs = compile_shader(fs_src, gl::FRAGMENT_SHADER);
-    let program = link_program(vs, fs);
+    let vertex_shader = compile_shader(vs_src, gl::VERTEX_SHADER);
+    let fragment_shader = compile_shader(fs_src, gl::FRAGMENT_SHADER);
+    let shader_program = link_program(vertex_shader, fragment_shader);
 
-    let mut vao = 0;
-    let mut vbo_1 = 0;
-    let mut vbo_2 = 0;
+    let mut vertex_array_object = 0;
+    let mut vertex_buffer_object = 0;
 
     unsafe {
 
       // Create Vertex Array Object and Vertex Buffer Objects
-      gl::GenVertexArrays(1, &mut vao);
-      gl::GenBuffers(1, &mut vbo_1);
-      gl::GenBuffers(1, &mut vbo_2);
+      gl::GenVertexArrays(1, &mut vertex_array_object);
+      gl::GenBuffers(1, &mut vertex_buffer_object);
 
-      gl::BindVertexArray(vao);
+      gl::BindVertexArray(vertex_array_object);
 
       // Create Vertex Buffer Object 1 for the vertex position data
-      gl::BindBuffer(gl::ARRAY_BUFFER, vbo_1);
+      gl::BindBuffer(gl::ARRAY_BUFFER, vertex_buffer_object);
       gl::BufferData(gl::ARRAY_BUFFER,
                      (vertices.len() * mem::size_of::<Vec3<GLfloat>>()) as GLsizeiptr,
                      cast::transmute(&vertices[0]),
                      gl::STATIC_DRAW);
 
-      // Create Vertex Buffer Object 1 for the vertex position normals
+      // Create Vertex Buffer Object 2 for the vertex position normals
       // gl::BindBuffer(gl::ARRAY_BUFFER, vbo_2);
       // gl::BufferData(gl::ARRAY_BUFFER,
       //                (normals.len() * mem::size_of::<Vec3<GLfloat>>()) as GLsizeiptr,
@@ -247,15 +249,15 @@ fn main() {
       //                gl::STATIC_DRAW);
 
       // Use shader program
-      gl::UseProgram(program);
-      "out_color".with_c_str(|ptr| gl::BindFragDataLocation(program, 0, ptr));
+      gl::UseProgram(shader_program);
+      "out_color".with_c_str(|ptr| gl::BindFragDataLocation(shader_program, 0, ptr));
 
-      let pos_attr = "position".with_c_str(|ptr| gl::GetAttribLocation(program, ptr));
-      //let nrm_attr = "normal".with_c_str(|ptr| gl::GetAttribLocation(program, ptr));
+      let pos_attr = "position".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
+      //let nrm_attr = "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
 
       gl::EnableVertexAttribArray(pos_attr as GLuint);
       //gl::EnableVertexAttribArray(nrm_attr as GLuint);
-      gl::VertexAttribPointer(pos_attr as GLuint, 3, gl::FLOAT, gl::FALSE as GLboolean, 0, ptr::null());
+      gl::VertexAttribPointer(pos_attr as GLuint, 3, gl::FLOAT, gl::FALSE, (3 * mem::size_of::<Vec3<GLfloat>>()) as GLint, ptr::null());
       //gl::VertexAttribPointer(nrm_attr as GLuint, 3, gl::FLOAT, gl::FALSE as GLboolean, 0, ptr::null());
 
     }
@@ -269,20 +271,19 @@ fn main() {
       gl::Clear(gl::COLOR_BUFFER_BIT);
 
       // Draw a triangle from the 3 vertices
-      gl::DrawArrays(gl::LINE_LOOP, 0, vertices.len() as GLint);
+      gl::DrawArrays(gl::TRIANGLES, 0, vertices.len() as GLint);
 
       // Swap buffers
       window.swap_buffers();
     }
 
     // Cleanup
-    gl::DeleteProgram(program);
-    gl::DeleteShader(fs);
-    gl::DeleteShader(vs);
+    gl::DeleteProgram(shader_program);
+    gl::DeleteShader(fragment_shader);
+    gl::DeleteShader(vertex_shader);
     unsafe {
-      gl::DeleteBuffers(1, &vbo_1);
-      gl::DeleteBuffers(1, &vbo_2);
-      gl::DeleteVertexArrays(1, &vao);
+      gl::DeleteBuffers(1, &vertex_buffer_object);
+      gl::DeleteVertexArrays(1, &vertex_array_object);
     }
   });
 }
