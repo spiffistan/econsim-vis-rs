@@ -31,7 +31,7 @@ static MAP_W: uint = 2048;
 static MAP_H: uint = 2048;
 static MAP_SIZE: uint = MAP_W * MAP_H;
 
-static SCALE:   f32 = 2048f32;
+static SCALE:   f32 = 2048.0;
 static SCALE_X: f32 = SCALE;
 static SCALE_Y: f32 = SCALE;
 static SCALE_Z: f32 = 1.0;
@@ -61,62 +61,48 @@ fn move_camera() {
 
 }
 
-// TODO XXX
-//
-// fn initialize_indices() -> ~[Vec3<GLfloat>] {
-//   let mut indices: ~[Vec3<GLfloat>] = ~[];
-//   let mut i = 0;
-//
-//   for row in range(0, MAP_W-1) {
-//     for col in range(0, MAP_H-1) {
-//
-//       let i0 = row * MAP_W + col;
-//       let i1 = i0 + MAP_H;
-//
-//       indices.push_all(~[
-//         i0   as f32,
-//         i0+1 as f32,
-//         i1   as f32,
-//         i1   as f32,
-//         i1+1 as f32,
-//         i0+1 as f32
-//       ]);
-//     }
-//   }
-//   indices
-// }
+fn initialize_vertices(heightmap: ~[u8]) -> ~[Vec4<GLfloat>] {
+  let mut vertices: ~[Vec4<GLfloat>] = ~[];
 
-fn initialize_vertices(heightmap: ~[u8]) -> ~[Vec3<GLfloat>] {
-  let mut vertices: ~[Vec3<GLfloat>] = ~[];
-  let mut i = 0;
-
-  for x in range(0, MAP_W-1) {
-    for y in range(0, MAP_H-1) {
+  for x in range(0, MAP_W) {
+    for y in range(0, MAP_H) {
 
       let xi = x as f32 / SCALE_X;
       let yi = y as f32 / SCALE_Y;
       let zi = heightmap[x * MAP_W + y] as f32 / SCALE_Z;
+      let wi = 0.0;
 
-      let sx = 1.0f32 / SCALE_X; // Step x
-      let sy = 1.0f32 / SCALE_Y; // Step y
+      let v = Vec4::new(xi, yi, zi, wi);
+      vertices.push(v);
 
-      let pos: [(f32, f32, f32), ..6] = [
-        (xi   , yi   , zi),
-        (xi   , yi+sy, zi),
-        (xi+sx, yi   , zi),
-        (xi   , yi+sy, zi),
-        (xi+sx, yi   , zi),
-        (xi+sx, yi+sy, zi)
-      ];
-
-      for tup in pos.iter() {
-        let (x, y, z) = *tup;
-        let v = Vec3::new(x as GLfloat, y as GLfloat, z as GLfloat);
-        vertices.push(v);
-      }
+      // println!("+ ({}, {}, {})", xi, yi, zi)
     }
   }
   vertices
+}
+
+fn initialize_indices() -> ~[u32] {
+  let mut indices: ~[u32] = ~[];
+
+  for x in range(0, MAP_W-1) {
+    for y in range(0, MAP_H-1) {
+
+      let start = (x * MAP_W + y);
+      let offset = MAP_H;
+
+      indices.push_all(&[
+        // Triangle 1
+        start as u32,
+        (start + 1) as u32,
+        (start + offset) as u32,
+        // Triangle 2
+        (start + 1) as u32,
+        (start + 1 + offset) as u32,
+        (start + offset) as u32
+      ]);
+    }
+  }
+  indices
 }
 
 fn initialize_normals(v: ~[Vec3<GLfloat>]) -> ~[Vec3<GLfloat>] {
@@ -211,27 +197,27 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
 
 fn main() {
 
-  let mut field_of_view:      f32 = 60.0;
-  let mut aspect_ratio:       f32 = MAP_W as f32 / MAP_H as f32;
-  let mut near_plane:         f32 = 0.1;
-  let mut far_plane:          f32 = 100.0;
-  let mut frustum_length:     f32 = far_plane - near_plane;
-  let mut y_scale:            f32 = cot(deg(field_of_view / 2.0).to_rad());
-  let mut x_scale:            f32 = y_scale / aspect_ratio;
-  let mut matrix_44_buf:      ~[GLfloat] = ~[0f32, ..16];
-
-  let mut view_matrix:        Mat4<GLfloat> = Mat4::zero();
-  let mut model_matrix:       Mat4<GLfloat> = Mat4::zero();
-
-  let c2r2: f32 = -((far_plane + near_plane) / frustum_length);
-  let c3r2: f32 = -((2.0 * near_plane * far_plane) / frustum_length);
-
-  let mut projection_matrix:  Mat4<GLfloat> = Mat4::new(
-    x_scale, 0.0,     0.0,      0.0,
-    0.0,     y_scale, 0.0,      0.0,
-    0.0,     0.0,     c2r2,    -1.0,
-    0.0,     0.0,     c3r2,     0.0
-  );
+  // let mut field_of_view:      f32 = 60.0;
+  // let mut aspect_ratio:       f32 = MAP_W as f32 / MAP_H as f32;
+  // let mut near_plane:         f32 = 0.1;
+  // let mut far_plane:          f32 = 100.0;
+  // let mut frustum_length:     f32 = far_plane - near_plane;
+  // let mut y_scale:            f32 = cot(deg(field_of_view / 2.0).to_rad());
+  // let mut x_scale:            f32 = y_scale / aspect_ratio;
+  // let mut matrix_44_buf:      ~[GLfloat] = ~[0f32, ..16];
+  //
+  // let mut view_matrix:        Mat4<GLfloat> = Mat4::zero();
+  // let mut model_matrix:       Mat4<GLfloat> = Mat4::zero();
+  //
+  // let c2r2: f32 = -((far_plane + near_plane) / frustum_length);
+  // let c3r2: f32 = -((2.0 * near_plane * far_plane) / frustum_length);
+  //
+  // let mut projection_matrix:  Mat4<GLfloat> = Mat4::new(
+  //   x_scale, 0.0,     0.0,      0.0,
+  //   0.0,     y_scale, 0.0,      0.0,
+  //   0.0,     0.0,     c2r2,    -1.0,
+  //   0.0,     0.0,     c3r2,     0.0
+  // );
 
   // cgmath doesn't seem to be able to update individual cells (yet?)
   // projection_matrix.c0r0 = x_scale;
@@ -247,11 +233,15 @@ fn main() {
 
   if DEBUG { print!("Computing vertices... "); flush(); }
   let vertices = initialize_vertices(heightmap);
-  if DEBUG { println!("done. ({} vertices, grid: [{}, {}])", vertices.len(), MAP_W, MAP_H) }
+  if DEBUG { println!("done. ({} vertices)", vertices.len()) }
 
-  if DEBUG { print!("Computing normals... "); flush(); }
-  let normals  = initialize_normals(vertices.clone());
-  if DEBUG { println!("done. ({} normals)", normals.len()) }
+  if DEBUG { print!("Computing indices... "); flush(); }
+  let indices = initialize_indices();
+  if DEBUG { println!("done. ({} indices)", indices.len()) }
+
+  // if DEBUG { print!("Computing normals... "); flush(); }
+  // let normals  = initialize_normals(vertices.clone());
+  // if DEBUG { println!("done. ({} normals)", normals.len()) }
 
   let vs_src = load_shader_file(VS_SRC);
   let fs_src = load_shader_file(FS_SRC);
@@ -265,7 +255,7 @@ fn main() {
     glfw::window_hint::opengl_profile(glfw::OpenGlCoreProfile);
     glfw::window_hint::opengl_forward_compat(true);
 
-    let window = glfw::Window::create(800, 600, "OpenGL", glfw::Windowed).unwrap();
+    let window = glfw::Window::create(1920, 1280, "OpenGL", glfw::Windowed).unwrap();
     window.make_context_current();
 
     // Load the OpenGL function pointers
@@ -276,25 +266,32 @@ fn main() {
     let fragment_shader = compile_shader(fs_src, gl::FRAGMENT_SHADER);
     let shader_program = link_program(vertex_shader, fragment_shader);
 
-    let mut vertex_array_object = 0;
-    let mut vertex_buffer_object_1 = 0;
-    let mut vertex_buffer_object_2 = 0;
+    let mut vertex_array_id = 0;
+    let mut vertex_buffer_id = 1;
+    let mut index_buffer_id = 2;
 
     unsafe {
 
       // Create Vertex Array Object and Vertex Buffer Objects
-      gl::GenVertexArrays(1, &mut vertex_array_object);
-      gl::GenBuffers(1, &mut vertex_buffer_object_1);
-      gl::GenBuffers(2, &mut vertex_buffer_object_2);
+      gl::GenVertexArrays(1, &mut vertex_array_id);
 
-      gl::BindVertexArray(vertex_array_object);
+      gl::BindVertexArray(vertex_array_id);
 
-      // Create Vertex Buffer Object 1 for the vertex position data
-      gl::BindBuffer(gl::ARRAY_BUFFER, vertex_buffer_object_1);
-      gl::BufferData(gl::ARRAY_BUFFER,
-                     (vertices.len() * mem::size_of::<Vec3<GLfloat>>()) as GLsizeiptr,
-                     cast::transmute(&vertices[0]),
-                     gl::STATIC_DRAW);
+      // Initialize vertex positions ///////////////////////////////////////////
+      let vertices_bytes = (vertices.len() * mem::size_of::<Vec4<GLfloat>>()) as GLsizeiptr;
+      let vertices_ptr = cast::transmute(&vertices[0]);
+
+      gl::GenBuffers(1, &mut vertex_buffer_id);
+      gl::BindBuffer(gl::ARRAY_BUFFER, vertex_buffer_id);
+      gl::BufferData(gl::ARRAY_BUFFER, vertices_bytes, vertices_ptr, gl::STATIC_DRAW);
+
+      // Initialize vertex indices /////////////////////////////////////////////
+      let indices_bytes = (indices.len() * mem::size_of::<u32>()) as GLsizeiptr;
+      let indices_ptr = cast::transmute(&indices[0]);
+
+      gl::GenBuffers(1, &mut index_buffer_id);
+      gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, index_buffer_id);
+      gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, indices_bytes, indices_ptr, gl::STATIC_DRAW);
 
       // Create Vertex Buffer Object 2 for the vertex position normals
       // gl::BindBuffer(gl::ARRAY_BUFFER, vertex_buffer_object_2);
@@ -308,12 +305,12 @@ fn main() {
       "out_color".with_c_str(|ptr| gl::BindFragDataLocation(shader_program, 0, ptr));
 
       let position_p = "position".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
-      let normal_p = "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
+      //let normal_p = "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
 
       gl::EnableVertexAttribArray(position_p as GLuint);
       //gl::EnableVertexAttribArray(normal_p as GLuint);
-      gl::VertexAttribPointer(position_p as GLuint, 3, gl::FLOAT, gl::FALSE, 0, ptr::null());
-      //gl::VertexAttribPointer(normal_p as GLuint, 3, gl::FLOAT, gl::FALSE, 0, ptr::null());
+      gl::VertexAttribPointer(position_p as GLuint, 4, gl::FLOAT, gl::FALSE, 0, ptr::null());
+      //gl::VertexAttribPointer(normal_p as GLuint, 1, gl::FLOAT, gl::FALSE, 0, ptr::null());
     }
 
     while !window.should_close() {
@@ -324,8 +321,7 @@ fn main() {
       gl::ClearColor(0.3, 0.3, 0.3, 1.0);
       gl::Clear(gl::COLOR_BUFFER_BIT);
 
-      // Draw a triangle from the 3 vertices
-      gl::DrawArrays(gl::TRIANGLES, 0, vertices.len() as GLint);
+      unsafe { gl::DrawElements(gl::TRIANGLES, indices.len() as GLint, gl::UNSIGNED_INT, ptr::null()); }
 
       // Swap buffers
       window.swap_buffers();
@@ -335,10 +331,11 @@ fn main() {
     gl::DeleteProgram(shader_program);
     gl::DeleteShader(fragment_shader);
     gl::DeleteShader(vertex_shader);
+
     unsafe {
-      gl::DeleteBuffers(1, &vertex_buffer_object_1);
-      gl::DeleteBuffers(1, &vertex_buffer_object_2);
-      gl::DeleteVertexArrays(1, &vertex_array_object);
+      gl::DeleteBuffers(1, &vertex_buffer_id);
+      gl::DeleteBuffers(1, &index_buffer_id);
+      gl::DeleteVertexArrays(1, &vertex_array_id);
     }
   });
 }

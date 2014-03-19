@@ -28,7 +28,7 @@ void main() {
     float s_grass = res * 0.22;
     float s_dirt  = res * 0.50;
     float s_rock  = res * 0.75;
-    float s_snow  = res * 0.97;
+    float s_snow  = res * 0.99;
 
     color = mix(water, shore, smoothstep(s_water, s_shore, z));
     color = mix(color, sand,  smoothstep(s_shore, s_sand,  z));
@@ -38,4 +38,6 @@ void main() {
     color = mix(color, snow,  smoothstep(s_rock,  res,     z));
 
     out_color = color;
+
+    // out_color = vec4(1.0, 1.0, vs_out.vs_worldpos.z / 128.0, 1.0);
 }
