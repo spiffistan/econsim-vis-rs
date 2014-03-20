@@ -211,27 +211,28 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
 
 fn main() {
 
-  // let mut field_of_view:      f32 = 60.0;
-  // let mut aspect_ratio:       f32 = MAP_W as f32 / MAP_H as f32;
-  // let mut near_plane:         f32 = 0.1;
-  // let mut far_plane:          f32 = 100.0;
-  // let mut frustum_length:     f32 = far_plane - near_plane;
-  // let mut y_scale:            f32 = cot(deg(field_of_view / 2.0).to_rad());
-  // let mut x_scale:            f32 = y_scale / aspect_ratio;
-  // let mut matrix_44_buf:      ~[GLfloat] = ~[0f32, ..16];
-  //
-  // let mut view_matrix:        Mat4<GLfloat> = Mat4::zero();
-  // let mut model_matrix:       Mat4<GLfloat> = Mat4::zero();
-  //
-  // let c2r2: f32 = -((far_plane + near_plane) / frustum_length);
-  // let c3r2: f32 = -((2.0 * near_plane * far_plane) / frustum_length);
-  //
-  // let mut projection_matrix:  Mat4<GLfloat> = Mat4::new(
-  //   x_scale, 0.0,     0.0,      0.0,
-  //   0.0,     y_scale, 0.0,      0.0,
-  //   0.0,     0.0,     c2r2,    -1.0,
-  //   0.0,     0.0,     c3r2,     0.0
-  // );
+  let mut field_of_view:      f32 = 60.0;
+  let mut aspect_ratio:       f32 = MAP_W as f32 / MAP_H as f32;
+  let mut near_plane:         f32 = 0.1;
+  let mut far_plane:          f32 = 100.0;
+  let mut frustum_length:     f32 = far_plane - near_plane;
+  let mut y_scale:            f32 = cot(deg(field_of_view / 2.0).to_rad());
+  let mut x_scale:            f32 = y_scale / aspect_ratio;
+
+  let mut matrix_44_buf:      ~[GLfloat] = ~[0f32, ..16]; // XXX Needed?
+
+  let mut view_matrix:        Mat4<GLfloat> = Mat4::zero();
+  let mut model_matrix:       Mat4<GLfloat> = Mat4::zero();
+
+  let c2r2: f32 = -((far_plane + near_plane) / frustum_length);
+  let c3r2: f32 = -((2.0 * near_plane * far_plane) / frustum_length);
+
+  let mut projection_matrix:  Mat4<GLfloat> = Mat4::new(
+    x_scale, 0.0,     0.0,      0.0,
+    0.0,     y_scale, 0.0,      0.0,
+    0.0,     0.0,     c2r2,    -1.0,
+    0.0,     0.0,     c3r2,     0.0
+  );
 
   // cgmath doesn't seem to be able to update individual cells (yet?)
   // projection_matrix.c0r0 = x_scale;
@@ -321,7 +322,9 @@ fn main() {
       "out_color".with_c_str(|ptr| gl::BindFragDataLocation(shader_program, 0, ptr));
 
       let position_p = "position".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
-      let normal_p = "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
+      //let normal_p = "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
+
+      "view_matrix".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
 
       gl::EnableVertexAttribArray(position_p as GLuint);
       //gl::EnableVertexAttribArray(normal_p as GLuint);
