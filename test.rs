@@ -41,6 +41,10 @@ static VS_SRC: &'static str = "test.vert";
 static FS_SRC: &'static str = "test.frag";
 
 
+// Globals
+static mut rotation_x: f32 = 60.0;
+static mut scale_all: f32 = 1.0;
+
 // Vertex-Normal-Texture
 pub struct Vnt {
   position: Vec3<GLfloat>,
@@ -282,6 +286,9 @@ fn main() {
     let fragment_shader = compile_shader(fs_src, gl::FRAGMENT_SHADER);
     let shader_program = link_program(vertex_shader, fragment_shader);
 
+    let mut in_rotation_x_p: i32 = 0;
+    let mut in_scale_p: i32 = 0;
+
     let mut vertex_array_id = 0;
     let mut vertex_buffer_id = 1;
     let mut index_buffer_id = 2;
@@ -324,7 +331,11 @@ fn main() {
       let position_p = "position".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
       //let normal_p = "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
 
-      "view_matrix".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
+      in_rotation_x_p = "in_rotation_x".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+      gl::Uniform1f(in_rotation_x_p, rotation_x);
+
+      in_scale_p = "in_scale".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+      gl::Uniform1f(in_scale_p, scale_all);
 
       gl::EnableVertexAttribArray(position_p as GLuint);
       //gl::EnableVertexAttribArray(normal_p as GLuint);
@@ -337,6 +348,8 @@ fn main() {
       glfw::poll_events();
       for event in window.flush_events() {
         handle_window_event(&window, event);
+        unsafe { gl::Uniform1f(in_rotation_x_p, rotation_x); }
+        unsafe { gl::Uniform1f(in_scale_p, scale_all); }
       }
 
       // Clear the screen to black
@@ -391,6 +404,18 @@ fn handle_window_event(window: &glfw::Window, (time, event): (f64, glfw::WindowE
       println!("Time: {}, Key: {}, ScanCode: {}, Action: {}, Modifiers: [{}]", time, key, scancode, action, mods);
       match (key, action) {
         (glfw::KeyEscape, glfw::Press) => window.set_should_close(true),
+        (glfw::KeyW, glfw::Press) => {
+          unsafe {
+            rotation_x += 1.0;
+            println!("rotation_x: {}", rotation_x);
+          }
+        },
+        (glfw::KeyQ, glfw::Press) => {
+          unsafe {
+            scale_all += 0.1;
+            println!("scale_all: {}", scale_all);
+          }
+        }
         (glfw::KeyR, glfw::Press) => {
           // Resize should cause the window to "refresh"
           let (window_width, window_height) = window.get_size();

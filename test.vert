@@ -7,6 +7,9 @@
 in vec3 position;
 in vec3 normal;
 
+uniform float in_rotation_x;
+uniform float in_scale;
+
 out Vertex {
   vec3 vs_worldpos;
   vec3 vs_normal;
@@ -71,9 +74,9 @@ void main() {
 
   vec4 projected_position = view_frustum(radians(45.0), 4.0/3.0, 0.0, 2048.0)
     * translate(-0.55, -0.55, 0.0)
-    * rotate_x(radians(45))
+    * rotate_x(radians(in_rotation_x))
+    * scale(in_scale, in_scale, in_scale)
     * scale(4.0/3.0,1.0,1.0)
-    * scale(1.5,1.5,1.5)
     * vec4(position.xy, position.z * -1, 1.0);
 
   float perspective_factor = 1.0; // projected_position.z * 0.5 + 1.0;
