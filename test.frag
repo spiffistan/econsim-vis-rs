@@ -11,7 +11,7 @@ void main() {
 
     vec4 color;
     float z = vs_out.vs_worldpos.z;
-    float res = 256.0;
+    float res = 0.125;
 
     vec4 water = vec4(0.0, 0.0, 0.5, 1.0);
     vec4 shore = vec4(0.0, 0.5, 1.0, 1.0);

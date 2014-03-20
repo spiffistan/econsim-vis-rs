@@ -34,12 +34,28 @@ static MAP_SIZE: uint = MAP_W * MAP_H;
 static SCALE:   f32 = 2048.0;
 static SCALE_X: f32 = SCALE;
 static SCALE_Y: f32 = SCALE;
-static SCALE_Z: f32 = 1.0;
+static SCALE_Z: f32 = 2048.0;
 
 // Shader sources
 static VS_SRC: &'static str = "test.vert";
 static FS_SRC: &'static str = "test.frag";
 
+
+// Vertex-Normal-Texture
+pub struct Vnt {
+  position: Vec3<GLfloat>,
+  normal:   Vec3<GLfloat>
+  //texture:  Vec2<GLfloat>
+}
+
+impl Vnt {
+  pub fn new(x: f32, y: f32, z: f32, nx: f32, ny: f32, nz: f32) -> Vnt {
+    Vnt {
+      position: Vec3::new(x, y, z),
+      normal: Vec3::new(nx, ny, nz)
+    }
+  }
+}
 
 // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
@@ -74,8 +90,6 @@ fn initialize_vertices(heightmap: ~[u8]) -> ~[Vec4<GLfloat>] {
 
       let v = Vec4::new(xi, yi, zi, wi);
       vertices.push(v);
-
-      // println!("+ ({}, {}, {})", xi, yi, zi)
     }
   }
   vertices
@@ -255,7 +269,8 @@ fn main() {
     glfw::window_hint::opengl_profile(glfw::OpenGlCoreProfile);
     glfw::window_hint::opengl_forward_compat(true);
 
-    let window = glfw::Window::create(1920, 1280, "OpenGL", glfw::Windowed).unwrap();
+    let window = glfw::Window::create(1280, 720, "OpenGL", glfw::Windowed).unwrap();
+    window.set_key_polling(true);
     window.make_context_current();
 
     // Load the OpenGL function pointers
@@ -269,6 +284,7 @@ fn main() {
     let mut vertex_array_id = 0;
     let mut vertex_buffer_id = 1;
     let mut index_buffer_id = 2;
+    // let mut normal_buffer_id = 3;
 
     unsafe {
 
@@ -293,8 +309,8 @@ fn main() {
       gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, index_buffer_id);
       gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, indices_bytes, indices_ptr, gl::STATIC_DRAW);
 
-      // Create Vertex Buffer Object 2 for the vertex position normals
-      // gl::BindBuffer(gl::ARRAY_BUFFER, vertex_buffer_object_2);
+      // Initialize vertex normals /////////////////////////////////////////////
+      // gl::BindBuffer(gl::ARRAY_BUFFER, normal_buffer_id);
       // gl::BufferData(gl::ARRAY_BUFFER,
       //                (normals.len() * mem::size_of::<Vec3<GLfloat>>()) as GLsizeiptr,
       //                cast::transmute(&normals[0]),
@@ -305,17 +321,20 @@ fn main() {
       "out_color".with_c_str(|ptr| gl::BindFragDataLocation(shader_program, 0, ptr));
 
       let position_p = "position".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
-      //let normal_p = "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
+      let normal_p = "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
 
       gl::EnableVertexAttribArray(position_p as GLuint);
       //gl::EnableVertexAttribArray(normal_p as GLuint);
       gl::VertexAttribPointer(position_p as GLuint, 4, gl::FLOAT, gl::FALSE, 0, ptr::null());
-      //gl::VertexAttribPointer(normal_p as GLuint, 1, gl::FLOAT, gl::FALSE, 0, ptr::null());
+      //gl::NormalPointer(normal_p as GLuint, 1, gl::FLOAT, gl::FALSE, 0, ptr::null());
     }
 
     while !window.should_close() {
       // Poll events
       glfw::poll_events();
+      for event in window.flush_events() {
+        handle_window_event(&window, event);
+      }
 
       // Clear the screen to black
       gl::ClearColor(0.3, 0.3, 0.3, 1.0);
@@ -335,6 +354,7 @@ fn main() {
     unsafe {
       gl::DeleteBuffers(1, &vertex_buffer_id);
       gl::DeleteBuffers(1, &index_buffer_id);
+      // gl::DeleteBuffers(1, &normal_buffer_id);
       gl::DeleteVertexArrays(1, &vertex_array_id);
     }
   });
@@ -345,4 +365,37 @@ impl glfw::ErrorCallback for ErrorContext {
     fn call(&self, _: glfw::Error, description: ~str) {
         println!("GLFW Error: {:s}", description);
     }
+}
+
+fn handle_window_event(window: &glfw::Window, (time, event): (f64, glfw::WindowEvent)) {
+  match event {
+    glfw::PosEvent(x, y)                => window.set_title(format!("Time: {}, Window pos: ({}, {})", time, x, y)),
+    glfw::SizeEvent(w, h)               => window.set_title(format!("Time: {}, Window size: ({}, {})", time, w, h)),
+    glfw::CloseEvent                    => println!("Time: {}, Window close requested.", time),
+    glfw::RefreshEvent                  => println!("Time: {}, Window refresh callback triggered.", time),
+    glfw::FocusEvent(true)              => println!("Time: {}, Window focus gained.", time),
+    glfw::FocusEvent(false)             => println!("Time: {}, Window focus lost.", time),
+    glfw::IconifyEvent(true)            => println!("Time: {}, Window was minimised", time),
+    glfw::IconifyEvent(false)           => println!("Time: {}, Window was maximised.", time),
+    glfw::FramebufferSizeEvent(w, h)    => println!("Time: {}, Framebuffer size: ({}, {})", time, w, h),
+    glfw::CharEvent(character)          => println!("Time: {}, Character: {}", time, character),
+    glfw::MouseButtonEvent(btn, action, mods) => println!("Time: {}, Button: {}, Action: {}, Modifiers: [{}]", time, btn, action, mods),
+    glfw::CursorPosEvent(xpos, ypos)    => window.set_title(format!("Time: {}, Cursor position: ({}, {})", time, xpos, ypos)),
+    glfw::CursorEnterEvent(true)        => println!("Time: {}, Cursor entered window.", time),
+    glfw::CursorEnterEvent(false)       => println!("Time: {}, Cursor left window.", time),
+    glfw::ScrollEvent(x, y)             => window.set_title(format!("Time: {}, Scroll offset: ({}, {})", time, x, y)),
+    glfw::KeyEvent(key, scancode, action, mods) => {
+      println!("Time: {}, Key: {}, ScanCode: {}, Action: {}, Modifiers: [{}]", time, key, scancode, action, mods);
+      match (key, action) {
+        (glfw::KeyEscape, glfw::Press) => window.set_should_close(true),
+        (glfw::KeyR, glfw::Press) => {
+          // Resize should cause the window to "refresh"
+          let (window_width, window_height) = window.get_size();
+          window.set_size(window_width + 1, window_height);
+          window.set_size(window_width, window_height);
+        }
+        _ => {}
+      }
+    }
+  }
 }
