@@ -74,11 +74,12 @@ void main() {
 
   mat4 projection = isometric * (1.0/sqrt(6));
 
-  vec4 projected_position = view_frustum(radians(45.0), 4.0/3.0, 0.0, 5.0 * in_scale_all)
+  vec4 projected_position = projection
+    // view_frustum(radians(45.0), 4.0/3.0, 0.0, 5.0 * in_scale_all)
     * translate(in_translate.x, in_translate.y, in_translate.z)
     * rotate_x(radians(in_rotate_x))
     * scale(in_scale_all, in_scale_all, in_scale_all)
-    * scale(4.0/3.0,1.0,1.0)
+    //* scale(4.0/3.0,1.0,1.0)
     * vec4(position.xy, position.z * -1, 1.0);
 
   float perspective_factor = 1.0; // projected_position.z * 0.5 + 1.0;

@@ -28,7 +28,7 @@ use gl::types::*;
 static DEBUG: bool = true;
 
 static PNG_SRC: &'static str = "map.png";
-static TEX_SRC: &'static str = "grass.png";
+static TEX_SRC: &'static str = "grass2.png";
 // static MAP_SRC: &'static str = "elevation.data";
 // static MAP_W: uint = 2048;
 // static MAP_H: uint = 2048;
