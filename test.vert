@@ -7,8 +7,10 @@
 in vec3 position;
 in vec3 normal;
 
-uniform float in_rotation_x;
-uniform float in_scale;
+uniform float in_rotate_x;
+uniform float in_scale_all;
+uniform vec3 in_translate;
+
 
 out Vertex {
   vec3 vs_worldpos;
@@ -57,7 +59,6 @@ mat4 rotate_x(float theta) {
     );
 }
 
-
 void main() {
 
   vs_out.vs_normal = normal;
@@ -72,10 +73,10 @@ void main() {
 
   mat4 projection = isometric * (1.0/sqrt(6));
 
-  vec4 projected_position = view_frustum(radians(45.0), 4.0/3.0, 0.0, 5.0)
-    * translate(-0.55, -0.55, 0.0)
-    * rotate_x(radians(in_rotation_x))
-    * scale(in_scale, in_scale, in_scale)
+  vec4 projected_position = view_frustum(radians(45.0), 4.0/3.0, 0.0, 5.0 * in_scale_all)
+    * translate(in_translate.x, in_translate.y, in_translate.z)
+    * rotate_x(radians(in_rotate_x))
+    * scale(in_scale_all, in_scale_all, in_scale_all)
     * scale(4.0/3.0,1.0,1.0)
     * vec4(position.xy, position.z * -1, 1.0);
 

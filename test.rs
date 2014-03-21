@@ -33,19 +33,19 @@ static PNG_SRC: &'static str = "map.png";
 // static MAP_H: uint = 2048;
 // static MAP_SIZE: uint = MAP_W * MAP_H;
 
-static SCALE:   f32 = 2048.0;
+static SCALE:   f32 = 512.0;
 static SCALE_X: f32 = SCALE;
 static SCALE_Y: f32 = SCALE;
-static SCALE_Z: f32 = 2048.0;
+static SCALE_Z: f32 = 2000.0;
 
 // Shader sources
 static VS_SRC: &'static str = "test.vert";
 static FS_SRC: &'static str = "test.frag";
 
-
 // Globals
-static mut rotation_x: f32 = 60.0;
-static mut scale_all: f32 = 1.0;
+static mut vs_rotation_x: f32 = 0.0;
+static mut vs_scale_all: f32 = 10.0;
+static mut vs_translate: Vec3<GLfloat> = Vec3 { x: -0.75, y: -0.5, z: 0.0 };
 
 // Vertex-Normal-Texture
 pub struct Vnt {
@@ -76,6 +76,14 @@ fn load_png_image() -> png::Image {
     Ok(image) => return image,
     Err(s) => fail!(s)
   }
+}
+
+fn load_flat_map(height: u32, width: u32, depth: u8) -> ~[u8] {
+  let mut data: ~[u8] = ~[];
+  for i in range(0, width*height) {
+    data.push(depth);
+  }
+  data
 }
 
 // fn load_heightmap() -> ~[u8] {
@@ -225,14 +233,18 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
 
 fn main() {
 
-  if DEBUG { print!("Loading heightmap from png: {}... ", PNG_SRC); flush(); }
+  // if DEBUG { print!("Loading heightmap from png: {}... ", PNG_SRC); flush(); }
+  //
+  // let image = load_png_image();
+  // let heightmap = image.pixels.clone();
+  // let width = image.width.clone();
+  // let height = image.height.clone();
+  //
+  // if DEBUG { println!("done. ({})", heightmap.len()) }
 
-  let image = load_png_image();
-  let heightmap = image.pixels.clone();
-  let width = image.width.clone();
-  let height = image.height.clone();
-
-  if DEBUG { println!("done. ({})", heightmap.len()) }
+  let width = 64;
+  let height = 64;
+  let heightmap = load_flat_map(width, height, 50);
 
   if DEBUG { print!("Computing vertices... "); flush(); }
   let vertices = initialize_vertices(heightmap, width, height);
@@ -305,6 +317,7 @@ fn main() {
 
     let mut in_rotation_x_p: i32 = 0;
     let mut in_scale_p: i32 = 0;
+    let mut in_translate_p: i32 = 0;
 
     let mut vertex_array_id = 0;
     let mut vertex_buffer_id = 1;
@@ -348,18 +361,21 @@ fn main() {
       let position_p = "position".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
       //let normal_p = "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
 
-      in_rotation_x_p = "in_rotation_x".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
-      gl::Uniform1f(in_rotation_x_p, rotation_x);
+      in_rotation_x_p = "in_rotate_x".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+      gl::Uniform1f(in_rotation_x_p, vs_rotation_x);
 
-      in_scale_p = "in_scale".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
-      gl::Uniform1f(in_scale_p, scale_all);
+      in_scale_p = "in_scale_all".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+      gl::Uniform1f(in_scale_p, vs_scale_all);
+
+      in_translate_p = "in_translate".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+      gl::Uniform3f(in_translate_p, vs_translate.x, vs_translate.y, vs_translate.z);
 
       gl::EnableVertexAttribArray(position_p as GLuint);
       //gl::EnableVertexAttribArray(normal_p as GLuint);
       gl::VertexAttribPointer(position_p as GLuint, 4, gl::FLOAT, gl::FALSE, 0, ptr::null());
       //gl::NormalPointer(normal_p as GLuint, 1, gl::FLOAT, gl::FALSE, 0, ptr::null());
 
-      gl::Enable(gl::DEPTH_TEST | gl::CULL_FACE);
+      gl::Enable(gl::DEPTH_TEST);
     }
 
     while !window.should_close() {
@@ -367,8 +383,9 @@ fn main() {
       glfw::poll_events();
       for event in window.flush_events() {
         handle_window_event(&window, event);
-        unsafe { gl::Uniform1f(in_rotation_x_p, rotation_x); }
-        unsafe { gl::Uniform1f(in_scale_p, scale_all); }
+        unsafe { gl::Uniform1f(in_rotation_x_p, vs_rotation_x); }
+        unsafe { gl::Uniform1f(in_scale_p, vs_scale_all); }
+        unsafe { gl::Uniform3f(in_translate_p, vs_translate.x, vs_translate.y, vs_translate.z); }
       }
 
       // Clear the screen to black
@@ -403,45 +420,43 @@ impl glfw::ErrorCallback for ErrorContext {
 }
 
 fn handle_window_event(window: &glfw::Window, (time, event): (f64, glfw::WindowEvent)) {
-  match event {
-    glfw::PosEvent(x, y)                => window.set_title(format!("Time: {}, Window pos: ({}, {})", time, x, y)),
-    glfw::SizeEvent(w, h)               => window.set_title(format!("Time: {}, Window size: ({}, {})", time, w, h)),
-    glfw::CloseEvent                    => println!("Time: {}, Window close requested.", time),
-    glfw::RefreshEvent                  => println!("Time: {}, Window refresh callback triggered.", time),
-    glfw::FocusEvent(true)              => println!("Time: {}, Window focus gained.", time),
-    glfw::FocusEvent(false)             => println!("Time: {}, Window focus lost.", time),
-    glfw::IconifyEvent(true)            => println!("Time: {}, Window was minimised", time),
-    glfw::IconifyEvent(false)           => println!("Time: {}, Window was maximised.", time),
-    glfw::FramebufferSizeEvent(w, h)    => println!("Time: {}, Framebuffer size: ({}, {})", time, w, h),
-    glfw::CharEvent(character)          => println!("Time: {}, Character: {}", time, character),
-    glfw::MouseButtonEvent(btn, action, mods) => println!("Time: {}, Button: {}, Action: {}, Modifiers: [{}]", time, btn, action, mods),
-    glfw::CursorPosEvent(xpos, ypos)    => window.set_title(format!("Time: {}, Cursor position: ({}, {})", time, xpos, ypos)),
-    glfw::CursorEnterEvent(true)        => println!("Time: {}, Cursor entered window.", time),
-    glfw::CursorEnterEvent(false)       => println!("Time: {}, Cursor left window.", time),
-    glfw::ScrollEvent(x, y)             => window.set_title(format!("Time: {}, Scroll offset: ({}, {})", time, x, y)),
-    glfw::KeyEvent(key, scancode, action, mods) => {
-      println!("Time: {}, Key: {}, ScanCode: {}, Action: {}, Modifiers: [{}]", time, key, scancode, action, mods);
-      match (key, action) {
-        (glfw::KeyEscape, glfw::Press) => window.set_should_close(true),
-        (glfw::KeyW, glfw::Press) => {
-          unsafe {
-            rotation_x += 1.0;
-            println!("rotation_x: {}", rotation_x);
+  unsafe {
+    match event {
+      glfw::PosEvent(x, y)                => window.set_title(format!("Time: {}, Window pos: ({}, {})", time, x, y)),
+      glfw::SizeEvent(w, h)               => window.set_title(format!("Time: {}, Window size: ({}, {})", time, w, h)),
+      glfw::CloseEvent                    => println!("Time: {}, Window close requested.", time),
+      glfw::RefreshEvent                  => println!("Time: {}, Window refresh callback triggered.", time),
+      glfw::FocusEvent(true)              => println!("Time: {}, Window focus gained.", time),
+      glfw::FocusEvent(false)             => println!("Time: {}, Window focus lost.", time),
+      glfw::IconifyEvent(true)            => println!("Time: {}, Window was minimised", time),
+      glfw::IconifyEvent(false)           => println!("Time: {}, Window was maximised.", time),
+      glfw::FramebufferSizeEvent(w, h)    => println!("Time: {}, Framebuffer size: ({}, {})", time, w, h),
+      glfw::CharEvent(character)          => println!("Time: {}, Character: {}", time, character),
+      glfw::MouseButtonEvent(btn, action, mods) => println!("Time: {}, Button: {}, Action: {}, Modifiers: [{}]", time, btn, action, mods),
+      glfw::CursorPosEvent(xpos, ypos)    => window.set_title(format!("Time: {}, Cursor position: ({}, {})", time, xpos, ypos)),
+      glfw::CursorEnterEvent(true)        => println!("Time: {}, Cursor entered window.", time),
+      glfw::CursorEnterEvent(false)       => println!("Time: {}, Cursor left window.", time),
+      glfw::ScrollEvent(x, y)             => window.set_title(format!("Time: {}, Scroll offset: ({}, {})", time, x, y)),
+      glfw::KeyEvent(key, scancode, action, mods) => {
+        println!("Time: {}, Key: {}, ScanCode: {}, Action: {}, Modifiers: [{}]", time, key, scancode, action, mods);
+        match (key, action) {
+          (glfw::KeyEscape, glfw::Press) => window.set_should_close(true),
+          (glfw::KeyW, glfw::Press) => { vs_translate.y += 0.1; println!("{}", vs_translate) },
+          (glfw::KeyS, glfw::Press) => { vs_translate.y -= 0.1; },
+          (glfw::KeyA, glfw::Press) => { vs_translate.x -= 0.1; },
+          (glfw::KeyD, glfw::Press) => { vs_translate.x += 0.1; },
+          (glfw::KeyDown, glfw::Press) => { vs_rotation_x  -= 5.0; },
+          (glfw::KeyUp, glfw::Press) => { vs_rotation_x += 5.0; },
+          (glfw::KeyR, glfw::Press) => { vs_scale_all   += 0.1; },
+          (glfw::KeyF, glfw::Press) => { vs_scale_all   -= 0.1; },
+          (glfw::KeySpace, glfw::Press) => {
+            // Resize should cause the window to "refresh"
+            let (window_width, window_height) = window.get_size();
+            window.set_size(window_width + 1, window_height);
+            window.set_size(window_width, window_height);
           }
-        },
-        (glfw::KeyQ, glfw::Press) => {
-          unsafe {
-            scale_all += 0.1;
-            println!("scale_all: {}", scale_all);
-          }
+          _ => {}
         }
-        (glfw::KeyR, glfw::Press) => {
-          // Resize should cause the window to "refresh"
-          let (window_width, window_height) = window.get_size();
-          window.set_size(window_width + 1, window_height);
-          window.set_size(window_width, window_height);
-        }
-        _ => {}
       }
     }
   }
