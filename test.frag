@@ -1,8 +1,10 @@
 #version 150
 
 out vec4 out_color;
+uniform sampler2D sampler;
 
 in Vertex {
+  vec2 vs_uv;
   vec3 vs_worldpos;
   vec3 vs_normal;
 } vs_out;
@@ -37,7 +39,7 @@ void main() {
     color = mix(color, rock,  smoothstep(s_dirt,  s_rock,  z));
     color = mix(color, snow,  smoothstep(s_rock,  res,     z));
 
-    out_color = color;
+    out_color = texture(sampler, vs_out.vs_uv);
 
     // out_color = vec4(1.0, 1.0, vs_out.vs_worldpos.z / 128.0, 1.0);
 }

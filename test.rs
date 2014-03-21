@@ -28,6 +28,7 @@ use gl::types::*;
 static DEBUG: bool = true;
 
 static PNG_SRC: &'static str = "map.png";
+static TEX_SRC: &'static str = "grass.png";
 // static MAP_SRC: &'static str = "elevation.data";
 // static MAP_W: uint = 2048;
 // static MAP_H: uint = 2048;
@@ -47,21 +48,27 @@ static mut vs_rotation_x: f32 = 0.0;
 static mut vs_scale_all: f32 = 10.0;
 static mut vs_translate: Vec3<GLfloat> = Vec3 { x: -0.75, y: -0.5, z: 0.0 };
 
+// TODO: perhaps use this?
+//
 // Vertex-Normal-Texture
-pub struct Vnt {
-  position: Vec3<GLfloat>,
-  normal:   Vec3<GLfloat>
-  //texture:  Vec2<GLfloat>
-}
-
-impl Vnt {
-  pub fn new(x: f32, y: f32, z: f32, nx: f32, ny: f32, nz: f32) -> Vnt {
-    Vnt {
-      position: Vec3::new(x, y, z),
-      normal: Vec3::new(nx, ny, nz)
-    }
-  }
-}
+// pub struct Vnt {
+//   position: Vec4<GLfloat>,
+//   normal:   Vec4<GLfloat>
+//   texture:  Vec2<GLfloat>
+// }
+//
+// impl Vnt {
+//   pub fn new(
+//     x:  f32, y:  f32, z:  f32, w:  f32,
+//     nx: f32, ny: f32, nz: f32, nw: f32,
+//     u: f32, v: f32) -> Vnt {
+//     Vnt {
+//       position: Vec4::new(x, y, z, w),
+//       normal: Vec4::new(nx, ny, nz, nw),
+//       texture: Vec2::new(u, v)
+//     }
+//   }
+// }
 
 // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
@@ -70,9 +77,9 @@ fn start(argc: int, argv: **u8) -> int {
   native::start(argc, argv, main)
 }
 
-fn load_png_image() -> png::Image {
-  let path = std::os::getcwd().join(Path::new(PNG_SRC));
-  match png::load_png(&path) {
+fn load_png_image(path: &Path) -> png::Image {
+  let file = std::os::getcwd().join(Path::new(path));
+  match png::load_png(&file) {
     Ok(image) => return image,
     Err(s) => fail!(s)
   }
@@ -322,13 +329,13 @@ fn main() {
     let mut vertex_array_id = 0;
     let mut vertex_buffer_id = 1;
     let mut index_buffer_id = 2;
+    let mut grass_texture_id = 3;
     // let mut normal_buffer_id = 3;
 
     unsafe {
 
       // Create Vertex Array Object and Vertex Buffer Objects
       gl::GenVertexArrays(1, &mut vertex_array_id);
-
       gl::BindVertexArray(vertex_array_id);
 
       // Initialize vertex positions ///////////////////////////////////////////
@@ -353,6 +360,19 @@ fn main() {
       //                (normals.len() * mem::size_of::<Vec3<GLfloat>>()) as GLsizeiptr,
       //                cast::transmute(&normals[0]),
       //                gl::STATIC_DRAW);
+
+      gl::GenTextures(1, &mut grass_texture_id);
+      gl::BindTexture(gl::TEXTURE_2D, grass_texture_id);
+
+      let tex = load_png_image(&Path::new(TEX_SRC));
+      let tex_height = tex.height.clone();
+      let tex_width = tex.width.clone();
+      let data = tex.pixels;
+
+      gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGBA as GLint, tex_width as GLint, tex_height as GLint, 0, gl::RGBA, gl::UNSIGNED_BYTE, data.as_ptr() as GLeglImageOES);
+
+      gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
+      gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
 
       // Use shader program
       gl::UseProgram(shader_program);

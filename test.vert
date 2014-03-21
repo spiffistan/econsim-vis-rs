@@ -11,8 +11,8 @@ uniform float in_rotate_x;
 uniform float in_scale_all;
 uniform vec3 in_translate;
 
-
 out Vertex {
+  vec2 vs_uv;
   vec3 vs_worldpos;
   vec3 vs_normal;
 } vs_out;
@@ -63,6 +63,7 @@ void main() {
 
   vs_out.vs_normal = normal;
   vs_out.vs_worldpos = position;
+  vs_out.vs_uv = position.xy * vec2(0.5 * 64) + vec2(0.5 * 64);
 
   mat4 isometric = mat4(
     vec4(sqrt(3),  0,       -sqrt(3),  0),
