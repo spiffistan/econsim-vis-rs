@@ -72,7 +72,7 @@ void main() {
 
   mat4 projection = isometric * (1.0/sqrt(6));
 
-  vec4 projected_position = view_frustum(radians(45.0), 4.0/3.0, 0.0, 2048.0)
+  vec4 projected_position = view_frustum(radians(45.0), 4.0/3.0, 0.0, 5.0)
     * translate(-0.55, -0.55, 0.0)
     * rotate_x(radians(in_rotation_x))
     * scale(in_scale, in_scale, in_scale)

@@ -2,6 +2,7 @@
 #[feature(macro_rules)];
 #[feature(link_args)];
 
+extern crate png;
 extern crate glfw = "glfw-rs";
 extern crate gl;
 extern crate native;
@@ -26,10 +27,11 @@ use gl::types::*;
 
 static DEBUG: bool = true;
 
-static MAP_SRC: &'static str = "elevation.data";
-static MAP_W: uint = 2048;
-static MAP_H: uint = 2048;
-static MAP_SIZE: uint = MAP_W * MAP_H;
+static PNG_SRC: &'static str = "map.png";
+// static MAP_SRC: &'static str = "elevation.data";
+// static MAP_W: uint = 2048;
+// static MAP_H: uint = 2048;
+// static MAP_SIZE: uint = MAP_W * MAP_H;
 
 static SCALE:   f32 = 2048.0;
 static SCALE_X: f32 = SCALE;
@@ -68,28 +70,36 @@ fn start(argc: int, argv: **u8) -> int {
   native::start(argc, argv, main)
 }
 
-fn load_heightmap() -> ~[u8] {
-  let p = std::os::getcwd().join(Path::new(MAP_SRC));
-  match File::open(&p).read_bytes(MAP_SIZE) {
-    Ok(res) => return res,
-    Err(_) => fail!("Could not load heightmap!")
+fn load_png_image() -> png::Image {
+  let path = std::os::getcwd().join(Path::new(PNG_SRC));
+  match png::load_png(&path) {
+    Ok(image) => return image,
+    Err(s) => fail!(s)
   }
 }
+
+// fn load_heightmap() -> ~[u8] {
+//   let path = std::os::getcwd().join(Path::new(MAP_SRC));
+//   match File::open(&path).read_bytes(MAP_SIZE) {
+//     Ok(res) => return res,
+//     Err(_) => fail!("Could not load heightmap!")
+//   }
+// }
 
 // TODO XXX
 fn move_camera() {
 
 }
 
-fn initialize_vertices(heightmap: ~[u8]) -> ~[Vec4<GLfloat>] {
+fn initialize_vertices(heightmap: ~[u8], width: u32, height: u32) -> ~[Vec4<GLfloat>] {
   let mut vertices: ~[Vec4<GLfloat>] = ~[];
 
-  for x in range(0, MAP_W) {
-    for y in range(0, MAP_H) {
+  for x in range(0, width) {
+    for y in range(0, height) {
 
       let xi = x as f32 / SCALE_X;
       let yi = y as f32 / SCALE_Y;
-      let zi = heightmap[x * MAP_W + y] as f32 / SCALE_Z;
+      let zi = heightmap[x * width + y] as f32 / SCALE_Z;
       let wi = 0.0;
 
       let v = Vec4::new(xi, yi, zi, wi);
@@ -99,14 +109,14 @@ fn initialize_vertices(heightmap: ~[u8]) -> ~[Vec4<GLfloat>] {
   vertices
 }
 
-fn initialize_indices() -> ~[u32] {
+fn initialize_indices(width: u32, height: u32) -> ~[u32] {
   let mut indices: ~[u32] = ~[];
 
-  for x in range(0, MAP_W-1) {
-    for y in range(0, MAP_H-1) {
+  for x in range(0, width-1) {
+    for y in range(0, height-1) {
 
-      let start = (x * MAP_W + y);
-      let offset = MAP_H;
+      let start = (x * width + y);
+      let offset = height;
 
       indices.push_all(&[
         // Triangle 1
@@ -123,39 +133,39 @@ fn initialize_indices() -> ~[u32] {
   indices
 }
 
-fn initialize_normals(v: ~[Vec3<GLfloat>]) -> ~[Vec3<GLfloat>] {
-  let mut normals: ~[Vec3<GLfloat>] = ~[];
-
-  for row in range(0, MAP_W-1) {
-    for col in range(0, MAP_H-1) {
-
-      let hr = MAP_W * row;
-      let hc = col;
-
-      let mut sum = Vec3::new(0f32, 0f32, 0f32);
-      let cur = v[hr+hc];
-
-      if row+1 < MAP_W && col+1 < MAP_H {
-        sum = sum + (v[hr+0 + hc+1] - cur).cross(&(v[hr+1 + hc+0] - cur)).normalize();
-      }
-
-      if row+1 < MAP_W && col > 0 {
-        sum = sum + (v[hr+1 + hc+0] - cur).cross(&(v[hr+0 + hc+1] - cur)).normalize();
-      }
-
-      if row > 0 && col > 0 {
-        sum = sum + (v[hr+0 + hc+1] - cur).cross(&(v[hr+1 + hc+0] - cur)).normalize();
-      }
-
-      if row > 0 && col+1 < MAP_H {
-        sum = sum + (v[hr+1 + hc+0] - cur).cross(&(v[hr+0 + hc+1] - cur)).normalize();
-      }
-
-      normals.push(sum.normalize());
-    }
-  }
-  normals
-}
+// fn initialize_normals(v: ~[Vec3<GLfloat>]) -> ~[Vec3<GLfloat>] {
+//   let mut normals: ~[Vec3<GLfloat>] = ~[];
+//
+//   for row in range(0, MAP_W-1) {
+//     for col in range(0, MAP_H-1) {
+//
+//       let hr = MAP_W * row;
+//       let hc = col;
+//
+//       let mut sum = Vec3::new(0f32, 0f32, 0f32);
+//       let cur = v[hr+hc];
+//
+//       if row+1 < MAP_W && col+1 < MAP_H {
+//         sum = sum + (v[hr+0 + hc+1] - cur).cross(&(v[hr+1 + hc+0] - cur)).normalize();
+//       }
+//
+//       if row+1 < MAP_W && col > 0 {
+//         sum = sum + (v[hr+1 + hc+0] - cur).cross(&(v[hr+0 + hc+1] - cur)).normalize();
+//       }
+//
+//       if row > 0 && col > 0 {
+//         sum = sum + (v[hr+0 + hc+1] - cur).cross(&(v[hr+1 + hc+0] - cur)).normalize();
+//       }
+//
+//       if row > 0 && col+1 < MAP_H {
+//         sum = sum + (v[hr+1 + hc+0] - cur).cross(&(v[hr+0 + hc+1] - cur)).normalize();
+//       }
+//
+//       normals.push(sum.normalize());
+//     }
+//   }
+//   normals
+// }
 
 
 // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -215,10 +225,31 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
 
 fn main() {
 
+  if DEBUG { print!("Loading heightmap from png: {}... ", PNG_SRC); flush(); }
+
+  let image = load_png_image();
+  let heightmap = image.pixels.clone();
+  let width = image.width.clone();
+  let height = image.height.clone();
+
+  if DEBUG { println!("done. ({})", heightmap.len()) }
+
+  if DEBUG { print!("Computing vertices... "); flush(); }
+  let vertices = initialize_vertices(heightmap, width, height);
+  if DEBUG { println!("done. ({} vertices)", vertices.len()) }
+
+  if DEBUG { print!("Computing indices... "); flush(); }
+  let indices = initialize_indices(width, height);
+  if DEBUG { println!("done. ({} indices)", indices.len()) }
+
+  // if DEBUG { print!("Computing normals... "); flush(); }
+  // let normals  = initialize_normals(vertices.clone());
+  // if DEBUG { println!("done. ({} normals)", normals.len()) }
+
   let mut field_of_view:      f32 = 60.0;
-  let mut aspect_ratio:       f32 = MAP_W as f32 / MAP_H as f32;
+  let mut aspect_ratio:       f32 = width as f32 / height as f32;
   let mut near_plane:         f32 = 0.1;
-  let mut far_plane:          f32 = 100.0;
+  let mut far_plane:          f32 = 5.0;
   let mut frustum_length:     f32 = far_plane - near_plane;
   let mut y_scale:            f32 = cot(deg(field_of_view / 2.0).to_rad());
   let mut x_scale:            f32 = y_scale / aspect_ratio;
@@ -246,21 +277,7 @@ fn main() {
   // projection_matrix.c3r2 = -((2 * near_plane * far_plane) / frustum_length);
   // projection_matrix.c3r3 = 0.0;
 
-  if DEBUG { print!("Loading heightmap from {}... ", MAP_SRC); flush(); }
-  let mut heightmap: ~[u8] = load_heightmap();
-  if DEBUG { println!("done. ({} bytes)", heightmap.len()) }
 
-  if DEBUG { print!("Computing vertices... "); flush(); }
-  let vertices = initialize_vertices(heightmap);
-  if DEBUG { println!("done. ({} vertices)", vertices.len()) }
-
-  if DEBUG { print!("Computing indices... "); flush(); }
-  let indices = initialize_indices();
-  if DEBUG { println!("done. ({} indices)", indices.len()) }
-
-  // if DEBUG { print!("Computing normals... "); flush(); }
-  // let normals  = initialize_normals(vertices.clone());
-  // if DEBUG { println!("done. ({} normals)", normals.len()) }
 
   let vs_src = load_shader_file(VS_SRC);
   let fs_src = load_shader_file(FS_SRC);
@@ -341,6 +358,8 @@ fn main() {
       //gl::EnableVertexAttribArray(normal_p as GLuint);
       gl::VertexAttribPointer(position_p as GLuint, 4, gl::FLOAT, gl::FALSE, 0, ptr::null());
       //gl::NormalPointer(normal_p as GLuint, 1, gl::FLOAT, gl::FALSE, 0, ptr::null());
+
+      gl::Enable(gl::DEPTH_TEST | gl::CULL_FACE);
     }
 
     while !window.should_close() {
@@ -354,7 +373,7 @@ fn main() {
 
       // Clear the screen to black
       gl::ClearColor(0.3, 0.3, 0.3, 1.0);
-      gl::Clear(gl::COLOR_BUFFER_BIT);
+      gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
       unsafe { gl::DrawElements(gl::TRIANGLES, indices.len() as GLint, gl::UNSIGNED_INT, ptr::null()); }
 
