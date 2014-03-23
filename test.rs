@@ -30,7 +30,7 @@ use gl::types::*;
 
 static DEBUG: bool = true;
 
-// static PNG_SRC: &'static str = "map.png";
+static PNG_SRC: &'static str = "map.png";
 static TEX_SRC: &'static str = "grass2.png";
 // static MAP_SRC: &'static str = "elevation.data";
 // static MAP_W: uint = 2048;
@@ -40,9 +40,12 @@ static TEX_SRC: &'static str = "grass2.png";
 static SCALE:   f32 = 64.0;
 static SCALE_X: f32 = SCALE;
 static SCALE_Y: f32 = SCALE;
-static SCALE_Z: f32 = 2000.0;
+static SCALE_Z: f32 = 200.0;
 
-static SCALE_MAX: f32 = 15.0;
+static SCROLLSPEED: f32 = 0.1;
+static SCALE_MAX: f32 = 25.0;
+static SUNLIGHT_INTENSITY_MIN: f32 = 0.5;
+static SUNLIGHT_INTENSITY_MAX: f32 = 1.5;
 
 // Shader sources
 static VS_SRC: &'static str = "test.vert";
@@ -52,6 +55,12 @@ static FS_SRC: &'static str = "test.frag";
 static mut vs_rotation_x: f32 = 0.0;
 static mut vs_scale_all: f32 = 5.0;
 static mut vs_translate: Vec3<GLfloat> = Vec3 { x: -0.75, y: -0.5, z: 0.0 };
+
+static mut fs_sunlight: DirectionalLight = DirectionalLight {
+  color:     Vec3 { x: 1.0, y: 1.0, z: 1.0 },
+  direction: Vec3 { x: 0.2, y: 0.2, z: -1.0 },
+  intensity: 1.0
+};
 
 // TODO: perhaps use this?
 //
@@ -76,6 +85,12 @@ static mut vs_translate: Vec3<GLfloat> = Vec3 { x: -0.75, y: -0.5, z: 0.0 };
 // }
 
 // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+struct DirectionalLight {
+  color: Vec3<GLfloat>,
+  direction: Vec3<GLfloat>,
+  intensity: GLfloat
+}
 
 #[start]
 fn start(argc: int, argv: **u8) -> int {
@@ -262,7 +277,7 @@ fn main() {
 
   // if DEBUG { print!("Loading heightmap from png: {}... ", PNG_SRC); flush(); }
   //
-  // let image = load_png_image();
+  // let image = load_png_image(&Path::new(PNG_SRC));
   // let heightmap = image.pixels.clone();
   // let width = image.width.clone();
   // let height = image.height.clone();
@@ -271,7 +286,7 @@ fn main() {
 
   let width = 64;
   let height = 64;
-  let heightmap = load_flat_map(width, height, 50);
+  let heightmap = load_flat_map(width, height, 0);
 
   if DEBUG { print!("Computing vertices... "); flush(); }
   let vertices = initialize_vertices(heightmap, width, height);
@@ -289,28 +304,28 @@ fn main() {
   // let normals  = initialize_normals(vertices.clone());
   // if DEBUG { println!("done. ({} normals)", normals.len()) }
 
-  let mut field_of_view:      f32 = 60.0;
-  let mut aspect_ratio:       f32 = width as f32 / height as f32;
-  let mut near_plane:         f32 = 0.1;
-  let mut far_plane:          f32 = 5.0;
-  let mut frustum_length:     f32 = far_plane - near_plane;
-  let mut y_scale:            f32 = cot(deg(field_of_view / 2.0).to_rad());
-  let mut x_scale:            f32 = y_scale / aspect_ratio;
-
-  let mut matrix_44_buf:      ~[GLfloat] = ~[0f32, ..16]; // XXX Needed?
-
-  let mut view_matrix:        Mat4<GLfloat> = Mat4::zero();
-  let mut model_matrix:       Mat4<GLfloat> = Mat4::zero();
-
-  let c2r2: f32 = -((far_plane + near_plane) / frustum_length);
-  let c3r2: f32 = -((2.0 * near_plane * far_plane) / frustum_length);
-
-  let mut projection_matrix:  Mat4<GLfloat> = Mat4::new(
-    x_scale, 0.0,     0.0,      0.0,
-    0.0,     y_scale, 0.0,      0.0,
-    0.0,     0.0,     c2r2,    -1.0,
-    0.0,     0.0,     c3r2,     0.0
-  );
+  // let mut field_of_view:      f32 = 60.0;
+  // let mut aspect_ratio:       f32 = width as f32 / height as f32;
+  // let mut near_plane:         f32 = 0.1;
+  // let mut far_plane:          f32 = 5.0;
+  // let mut frustum_length:     f32 = far_plane - near_plane;
+  // let mut y_scale:            f32 = cot(deg(field_of_view / 2.0).to_rad());
+  // let mut x_scale:            f32 = y_scale / aspect_ratio;
+  //
+  // let mut matrix_44_buf:      ~[GLfloat] = ~[0f32, ..16]; // XXX Needed?
+  //
+  // let mut view_matrix:        Mat4<GLfloat> = Mat4::zero();
+  // let mut model_matrix:       Mat4<GLfloat> = Mat4::zero();
+  //
+  // let c2r2: f32 = -((far_plane + near_plane) / frustum_length);
+  // let c3r2: f32 = -((2.0 * near_plane * far_plane) / frustum_length);
+  //
+  // let mut projection_matrix:  Mat4<GLfloat> = Mat4::new(
+  //   x_scale, 0.0,     0.0,      0.0,
+  //   0.0,     y_scale, 0.0,      0.0,
+  //   0.0,     0.0,     c2r2,    -1.0,
+  //   0.0,     0.0,     c3r2,     0.0
+  // );
 
   // cgmath doesn't seem to be able to update individual cells (yet?)
   // projection_matrix.c0r0 = x_scale;
@@ -321,6 +336,8 @@ fn main() {
   // projection_matrix.c3r3 = 0.0;
 
 
+
+  // Start OpenGL -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
   let vs_src = load_shader_file(VS_SRC);
   let fs_src = load_shader_file(FS_SRC);
@@ -349,6 +366,10 @@ fn main() {
     let mut in_rotation_x_p: i32 = 0;
     let mut in_scale_p: i32 = 0;
     let mut in_translate_p: i32 = 0;
+    let mut in_sunlight_p: i32 = 0;
+    let mut in_sunlight_color_p: i32 = 0;
+    let mut in_sunlight_direction_p: i32 = 0;
+    let mut in_sunlight_intensity_p: i32 = 0;
 
     let mut vertex_array_id = 0;
     let mut vertex_buffer_id = 1;
@@ -406,6 +427,7 @@ fn main() {
 
       gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
       gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+      gl::GenerateMipmap(gl::TEXTURE_2D);
 
       // Use shader program
       gl::UseProgram(shader_program);
@@ -419,6 +441,14 @@ fn main() {
 
       in_translate_p = "in_translate".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
       gl::Uniform3f(in_translate_p, vs_translate.x, vs_translate.y, vs_translate.z);
+
+      in_sunlight_color_p     = "sunlight.color".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+      in_sunlight_direction_p = "sunlight.direction".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+      in_sunlight_intensity_p = "sunlight.intensity".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+
+      gl::Uniform3f(in_sunlight_color_p, fs_sunlight.color.x, fs_sunlight.color.x, fs_sunlight.color.x);
+      gl::Uniform3f(in_sunlight_direction_p, fs_sunlight.direction.x, fs_sunlight.direction.x, fs_sunlight.direction.x);
+      gl::Uniform1f(in_sunlight_intensity_p, fs_sunlight.intensity);
 
       let position_p = "position".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
       let texcoord_p = "texcoord".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
@@ -439,9 +469,14 @@ fn main() {
       glfw::poll_events();
       for event in window.flush_events() {
         handle_window_event(&window, event);
-        unsafe { gl::Uniform1f(in_rotation_x_p, vs_rotation_x); }
-        unsafe { gl::Uniform1f(in_scale_p, vs_scale_all); }
-        unsafe { gl::Uniform3f(in_translate_p, vs_translate.x, vs_translate.y, vs_translate.z); }
+        unsafe {
+          gl::Uniform1f(in_rotation_x_p, vs_rotation_x);
+          gl::Uniform1f(in_scale_p, vs_scale_all);
+          gl::Uniform3f(in_translate_p, vs_translate.x, vs_translate.y, vs_translate.z);
+          gl::Uniform3f(in_sunlight_color_p, fs_sunlight.color.x, fs_sunlight.color.x, fs_sunlight.color.x);
+          gl::Uniform3f(in_sunlight_direction_p, fs_sunlight.direction.x, fs_sunlight.direction.x, fs_sunlight.direction.x);
+          gl::Uniform1f(in_sunlight_intensity_p, fs_sunlight.intensity);
+        }
       }
 
       // Clear the screen to black
@@ -475,9 +510,22 @@ impl glfw::ErrorCallback for ErrorContext {
     }
 }
 
+unsafe fn move_world(x_factor: f32, y_factor: f32) {
+  vs_translate.x += x_factor;
+  vs_translate.y += y_factor;
+}
+
 unsafe fn scale_world(factor: f32) {
   if vs_scale_all + factor > 0.0 && vs_scale_all + factor < SCALE_MAX { vs_scale_all += factor }
 }
+
+unsafe fn adjust_light_intensity(factor: f32) {
+  if fs_sunlight.intensity + factor > SUNLIGHT_INTENSITY_MIN
+  && fs_sunlight.intensity + factor < SUNLIGHT_INTENSITY_MAX {
+    fs_sunlight.intensity += factor
+  }
+}
+
 
 fn handle_window_event(window: &glfw::Window, (time, event): (f64, glfw::WindowEvent)) {
   unsafe {
@@ -501,16 +549,27 @@ fn handle_window_event(window: &glfw::Window, (time, event): (f64, glfw::WindowE
         println!("Time: {}, Key: {}, ScanCode: {}, Action: {}, Modifiers: [{}]", time, key, scancode, action, mods);
         match (key, action) {
           (glfw::KeyEscape, glfw::Press) => window.set_should_close(true),
-          (glfw::KeyW, glfw::Repeat) => { vs_translate.y += 0.1; println!("{}", vs_translate) },
-          (glfw::KeyS, glfw::Repeat) => { vs_translate.y -= 0.1; },
-          (glfw::KeyA, glfw::Repeat) => { vs_translate.x -= 0.1; },
-          (glfw::KeyD, glfw::Repeat) => { vs_translate.x += 0.1; },
-          (glfw::KeyDown, glfw::Repeat) => { vs_rotation_x  -= 5.0; },
-          (glfw::KeyUp, glfw::Repeat) => { vs_rotation_x += 5.0; },
-          (glfw::KeyR, glfw::Press) => { scale_world(0.5); },
-          (glfw::KeyR, glfw::Repeat) => { scale_world(0.5); },
-          (glfw::KeyF, glfw::Press) => { scale_world(-0.5); },
-          (glfw::KeyF, glfw::Repeat) => { scale_world(-0.5); },
+          (glfw::KeyW, glfw::Repeat)     => { move_world( 0.00, -SCROLLSPEED) },
+          (glfw::KeyW, glfw::Press)      => { move_world( 0.00, -SCROLLSPEED) },
+          (glfw::KeyS, glfw::Repeat)     => { move_world( 0.00,  SCROLLSPEED) },
+          (glfw::KeyS, glfw::Press)      => { move_world( 0.00,  SCROLLSPEED) },
+          (glfw::KeyA, glfw::Repeat)     => { move_world( SCROLLSPEED,  0.00) },
+          (glfw::KeyA, glfw::Press)      => { move_world( SCROLLSPEED,  0.00) },
+          (glfw::KeyD, glfw::Repeat)     => { move_world(-SCROLLSPEED,  0.00) },
+          (glfw::KeyD, glfw::Press)      => { move_world(-SCROLLSPEED,  0.00) },
+
+          (glfw::KeyR, glfw::Press)      => { scale_world(0.5) },
+          (glfw::KeyR, glfw::Repeat)     => { scale_world(0.5) },
+          (glfw::KeyF, glfw::Press)      => { scale_world(-0.5) },
+          (glfw::KeyF, glfw::Repeat)     => { scale_world(-0.5) },
+
+          (glfw::KeyK, glfw::Press)      => { adjust_light_intensity(-0.02) },
+          (glfw::KeyL, glfw::Press)      => { adjust_light_intensity(0.02) },
+          (glfw::KeyK, glfw::Repeat)     => { adjust_light_intensity(-0.02) },
+          (glfw::KeyL, glfw::Repeat)     => { adjust_light_intensity(0.02) },
+
+          (glfw::KeyDown, glfw::Repeat)  => { vs_rotation_x  -= 5.0; },
+          (glfw::KeyUp, glfw::Repeat)    => { vs_rotation_x += 5.0; },
           (glfw::KeySpace, glfw::Press) => {
             // Resize should cause the window to "refresh"
             let (window_width, window_height) = window.get_size();

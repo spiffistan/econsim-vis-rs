@@ -77,7 +77,7 @@ void main() {
 
   // vs_out.vs_normal = normal;
   vs_out.vs_worldpos = position;
-  vs_out.vs_uv = position.xy * vec2(0.5 * 64) + vec2(0.5 * 64);
+  vs_out.vs_uv = position.xy * vec2(32) + vec2(32);
 
   mat4 isometric = mat4(
     vec4(sqrt(3),  0,       -sqrt(3),  0),
@@ -94,8 +94,9 @@ void main() {
     * scale(in_scale_all, in_scale_all, in_scale_all)
     //* scale(4.0/3.0,1.0,1.0)
     * rotate(vec3(0,0,1), radians(15))
+    * rotate(vec3(1,0,0), radians(15))
 
-    * vec4(position.xy, position.z * -1, 1.0);
+    * vec4(position.xyz, 1.0);
 
   float perspective_factor = 1.0; // projected_position.z * 0.5 + 1.0;
   gl_Position = vec4(projected_position.xyz/perspective_factor, 1.0);
