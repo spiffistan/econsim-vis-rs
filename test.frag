@@ -15,11 +15,23 @@ in Vertex {
   vec3 normal;
 } vs_out;
 
+// vec3 face_normal( vec3 position[3], vec3 normal[3])
+// {
+//   vec3 p0 = position.y - position.x;
+//   vec3 p1 = position.z - position.y;
+//   vec3 face_normal = cross( p0, p1 );
+//
+//   vec3 vertex_normal = normals.x; // or you can average 3 normals.
+//   float dot_product = dot( face_normal, vertex_normal );
+//
+//   return ( dot_product < 0.0f ) ? -face_normal : face_normal;
+// }
+
 void main() {
 
   vec4 color;
   float z = vs_out.position.z;
-  float res = 0.125;
+  float res = 1;
 
   vec4 water = vec4(0.0, 0.0, 0.5, 1.0);
   vec4 shore = vec4(0.0, 0.5, 1.0, 1.0);
@@ -45,12 +57,12 @@ void main() {
   color = mix(color, rock,  smoothstep(s_dirt,  s_rock,  z));
   color = mix(color, snow,  smoothstep(s_rock,  res,     z));
 
-  vec4 tex = texture(sampler, vs_out.texcoord);
+  vec4 tex = texture(sampler, vs_out.position.xy * vec2(512));
   float diffuse_intensity = max(0.0, dot(normalize(vs_out.normal), -sunlight.direction));
 
   vec4 light = vec4(sunlight.color * (sunlight.intensity + diffuse_intensity), 1.0);
 
-  // out_color = color;
-  out_color = tex * light * vec4(1.0, 1.0, 1.0, 1.0);
+  // out_color = color * tex;
+  out_color = color * tex * light;
 
 }

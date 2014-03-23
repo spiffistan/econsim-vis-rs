@@ -29,17 +29,17 @@ use gl::types::*;
 
 static DEBUG: bool = true;
 
-static PNG_SRC: &'static str = "map.png";
+static PNG_SRC: &'static str = "heightmap2.png";
 static TEX_SRC: &'static str = "grass.png";
 // static MAP_SRC: &'static str = "elevation.data";
 // static MAP_W: uint = 2048;
 // static MAP_H: uint = 2048;
 // static MAP_SIZE: uint = MAP_W * MAP_H;
 
-static SCALE:   f32 = 64.0;
+static SCALE:   f32 = 512.0;
 static SCALE_X: f32 = SCALE;
 static SCALE_Y: f32 = SCALE;
-static SCALE_Z: f32 = 200.0;
+static SCALE_Z: f32 = 256.0;
 
 static SCROLL_SPEED: f32 = 0.1;
 static SCALE_MAX: f32 = 25.0;
@@ -51,6 +51,8 @@ static VS_SRC: &'static str = "test.vert";
 static FS_SRC: &'static str = "test.frag";
 
 // Globals  -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+static mut draw_loops: bool = false;
 
 static mut vs_rotation_x: f32 = 0.0;
 static mut vs_scale_all: f32 = 5.0;
@@ -405,11 +407,10 @@ fn main() {
     let shader_program = link_program(vertex_shader, fragment_shader);
 
     let mut vertex_array_id = 0;
-    let mut vertex_buffer_id = 1;
+    let mut vnt_buffer_id = 1;
     let mut index_buffer_id = 2;
-    let mut texcoords_buffer_id = 3;
-    let mut grass_texture_id = 4;
-    let mut normal_buffer_id = 5;
+
+    let mut grass_texture_id = 1;
 
     unsafe {
 
@@ -417,11 +418,7 @@ fn main() {
       gl::GenVertexArrays(1, &mut vertex_array_id);
       gl::BindVertexArray(vertex_array_id);
 
-      //initialize_vbo(vertices,  &mut vertex_buffer_id,    gl::ARRAY_BUFFER);
-      initialize_vbo(vnts,  &mut vertex_buffer_id,    gl::ARRAY_BUFFER);
-      //initialize_vbo(texcoords, &mut texcoords_buffer_id, gl::ARRAY_BUFFER);
-      //initialize_vbo(normals,   &mut normal_buffer_id,    gl::ARRAY_BUFFER);
-      //initialize_vbo(indices,   &mut index_buffer_id, gl::ELEMENT_ARRAY_BUFFER);
+      initialize_vbo(vnts,  &mut vnt_buffer_id, gl::ARRAY_BUFFER);
 
       // // Initialize vertex indices /////////////////////////////////////////////
       let indices_bytes = (indices.len() * mem::size_of::<u32>()) as GLsizeiptr;
@@ -465,8 +462,6 @@ fn main() {
       let normal_p =   "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
 
       gl::EnableVertexAttribArray(0);
-      //gl::EnableVertexAttribArray(1);
-      //gl::EnableVertexAttribArray(2);
 
       let stride = mem::size_of::<Vec2<GLfloat>>() + mem::size_of::<Vec4<GLfloat>>()+ mem::size_of::<Vec3<GLfloat>>();
 
@@ -491,7 +486,6 @@ fn main() {
     while !window.should_close() {
 
       // Compute FPS
-
       current_time = glfw::get_time();
       frames += 1;
 
@@ -520,7 +514,10 @@ fn main() {
       gl::ClearColor(0.3, 0.3, 0.3, 1.0);
       gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
-      unsafe { gl::DrawElements(gl::TRIANGLES, indices.len() as GLint, gl::UNSIGNED_INT, ptr::null()); }
+      unsafe {
+        let kind = if draw_loops {gl::LINE_LOOP} else {gl::TRIANGLES};
+        gl::DrawElements(kind, indices.len() as GLint, gl::UNSIGNED_INT, ptr::null());
+      }
 
       // Swap buffers
       window.swap_buffers();
@@ -532,9 +529,8 @@ fn main() {
     gl::DeleteShader(vertex_shader);
 
     unsafe {
-      gl::DeleteBuffers(1, &vertex_buffer_id);
       gl::DeleteBuffers(1, &index_buffer_id);
-      gl::DeleteBuffers(1, &normal_buffer_id);
+      gl::DeleteBuffers(1, &vnt_buffer_id);
       gl::DeleteVertexArrays(1, &vertex_array_id);
     }
   });
@@ -635,6 +631,8 @@ unsafe fn handle_key_event(window: &glfw::Window, key: glfw::Key, action: glfw::
     (glfw::KeyL, glfw::Press)      => { adjust_light_intensity(0.02) },
     (glfw::KeyK, glfw::Repeat)     => { adjust_light_intensity(-0.02) },
     (glfw::KeyL, glfw::Repeat)     => { adjust_light_intensity(0.02) },
+
+    (glfw::KeyT, glfw::Press)      => { draw_loops = !draw_loops },
 
     (glfw::KeyDown, glfw::Repeat)  => { vs_rotation_x -= 5.0; },
     (glfw::KeyUp, glfw::Repeat)    => { vs_rotation_x += 5.0; },
