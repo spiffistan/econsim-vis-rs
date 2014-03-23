@@ -77,7 +77,7 @@ void main() {
 
   vs_out.normal = normal;
   vs_out.position = position;
-  vs_out.texcoord = position.xy;
+  vs_out.texcoord = texcoord;
 
   mat4 isometric = mat4(
     vec4(sqrt(3),  0,       -sqrt(3),  0),

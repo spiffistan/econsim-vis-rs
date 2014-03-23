@@ -198,32 +198,32 @@ fn initialize_normals(v: &[Vec4<GLfloat>], width: u32, height: u32) -> ~[Vec3<GL
   for row in range(0, width) {
     for col in range(0, height) {
 
-      // let hr = width * row;
-      // let hc = col;
-      //
-      // let mut sum = Vec3::new(0f32, 0f32, 0f32);
-      // let cur = v[hr+hc].truncate();
-      //
-      // if row+1 < width && col+1 < height {
-      //   sum = sum + (v[hr+0 + hc+1].truncate() - cur).cross(&(v[hr+1 + hc+0].truncate() - cur)).normalize();
-      // }
-      //
-      // if row+1 < width && col > 0 {
-      //   sum = sum + (v[hr+1 + hc+0].truncate() - cur).cross(&(v[hr+0 + hc+1].truncate() - cur)).normalize();
-      // }
-      //
-      // if row > 0 && col > 0 {
-      //   sum = sum + (v[hr+0 + hc+1].truncate() - cur).cross(&(v[hr+1 + hc+0].truncate() - cur)).normalize();
-      // }
-      //
-      // if row > 0 && col+1 < height {
-      //   sum = sum + (v[hr+1 + hc+0].truncate() - cur).cross(&(v[hr+0 + hc+1].truncate() - cur)).normalize();
-      // }
-      //
-      // sum = sum.normalize();
-      //
-      // normals.push(Vec3::new(sum.x, sum.y, sum.z));
-      normals.push(Vec3::new(0f32, 1f32, 0f32))
+      let hr = width * row;
+      let hc = col;
+
+      let mut sum = Vec3::new(0f32, 0f32, 0f32);
+      let cur = v[hr+hc].truncate();
+
+      if row+1 < width && col+1 < height {
+        sum = sum + (v[hr+0 + hc+1].truncate() - cur).cross(&(v[hr+1 + hc+0].truncate() - cur)).normalize();
+      }
+
+      if row+1 < width && col > 0 && col+1 < height {
+        sum = sum + (v[hr+1 + hc+0].truncate() - cur).cross(&(v[hr+0 + hc+1].truncate() - cur)).normalize();
+      }
+
+      if row > 0 && col > 0 && col+1 < height {
+        sum = sum + (v[hr+0 + hc+1].truncate() - cur).cross(&(v[hr+1 + hc+0].truncate() - cur)).normalize();
+      }
+
+      if row > 0 && col+1 < height && row+1 < width {
+        sum = sum + (v[hr+1 + hc+0].truncate() - cur).cross(&(v[hr+0 + hc+1].truncate() - cur)).normalize();
+      }
+
+      sum = sum.normalize();
+
+      normals.push(Vec3::new(sum.x / SCALE_X, sum.y / SCALE_Y, sum.z / SCALE_Z));
+      //normals.push(Vec3::new(0f32, 1f32, 0f32))
     }
   }
   normals
@@ -231,6 +231,7 @@ fn initialize_normals(v: &[Vec4<GLfloat>], width: u32, height: u32) -> ~[Vec3<GL
 
 fn initialize_vnts(vs: ~[Vec4<GLfloat>], ns: ~[Vec3<GLfloat>], ts: ~[Vec2<GLfloat>]) -> ~[Vnt] {
 
+  // Make sure there are equal numbers of vertices, normals and texture coordinates
   assert!(vs.len() == ts.len());
   assert!(vs.len() == ns.len());
 
@@ -313,18 +314,18 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
 
 fn main() {
 
-  // if DEBUG { print!("Loading heightmap from png: {}... ", PNG_SRC); flush(); }
-  //
-  // let image = load_png_image(PNG_SRC.to_owned());
-  // let heightmap = image.pixels.clone();
-  // let width = image.width.clone();
-  // let height = image.height.clone();
-  //
-  // if DEBUG { println!("done. ({})", heightmap.len()) }
+  if DEBUG { print!("Loading heightmap from png: {}... ", PNG_SRC); flush(); }
 
-  let width = 64;
-  let height = 64;
-  let heightmap = load_flat_map(width, height, 0);
+  let image = load_png_image(PNG_SRC.to_owned());
+  let heightmap = image.pixels.clone();
+  let width = image.width.clone();
+  let height = image.height.clone();
+
+  if DEBUG { println!("done. ({})", heightmap.len()) }
+
+  // let width = 64;
+  // let height = 64;
+  // let heightmap = load_flat_map(width, height, 0);
 
   if DEBUG { print!("Computing vertices... "); flush(); }
   let vertices = initialize_vertices(heightmap, width, height);
@@ -483,7 +484,23 @@ fn main() {
       gl::FrontFace(gl::CW);
     }
 
+    let mut last_time = glfw::get_time();
+    let mut current_time: f64 = 0.0;
+    let mut frames: u64 = 0;
+
     while !window.should_close() {
+
+      // Compute FPS
+
+      current_time = glfw::get_time();
+      frames += 1;
+
+      if current_time - last_time >= 1.0 {
+        println!("{} FPS ({} ms/frame)", frames, 1000.0/(frames as f64))
+        frames = 0;
+        last_time += 1.0;
+      }
+
       // Poll events
       glfw::poll_events();
       for event in window.flush_events() {
