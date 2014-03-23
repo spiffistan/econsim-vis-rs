@@ -137,7 +137,7 @@ fn load_flat_map(height: u32, width: u32, depth: u8) -> ~[u8] {
 
 // Vertex, Normal and Texture initialization -- -- -- -- -- -- -- -- -- -- -- --
 
-fn initialize_vertices(heightmap: &[u8], width: u32, height: u32) -> ~[Vec4<GLfloat>] {
+fn initialize_vertices(heightmap: ~[f32], width: u32, height: u32) -> ~[Vec4<GLfloat>] {
   let mut vertices: ~[Vec4<GLfloat>] = ~[];
 
   for x in range(0, width) {
@@ -257,6 +257,106 @@ fn initialize_vnts(vs: ~[Vec4<GLfloat>], ns: ~[Vec3<GLfloat>], ts: ~[Vec2<GLfloa
 }
 
 
+// -- --
+// source: http://archive.gamedev.net/archive/reference/articles/article2164.html
+
+fn box_filter_heightmap(heightmap: ~[u8], width: u32, height: u32, smoothen_edges: bool) -> ~[GLfloat] {
+
+  let mut filtered_map: ~[GLfloat] = ~[];
+
+  let x = 0;
+  let z = 0;
+
+  let z_stop = if smoothen_edges {width} else {width-1};
+  let x_stop = if smoothen_edges {height} else {height-1};
+
+  let bounds = width * height;
+
+  let x_start = if smoothen_edges {0} else {1};
+  let z_start = if smoothen_edges {0} else {1};
+
+  for z in range(z_start, z_stop) {
+    for x in range(x_start, x_stop) {
+
+      // Sample a 3x3 filtering grid based on surrounding neighbors
+
+      let mut value = 0.0f32;
+      let mut average = 1.0f32;
+
+      // Sample top row
+
+      if (((x - 1) + (z - 1) * width) >= 0 &&
+          ((x - 1) + (z - 1) * width) < bounds)
+      {
+        value += heightmap[(x - 1) + (z - 1) * width] as f32;
+        average += 1.0;
+      }
+
+      if (((x - 0) + (z - 1) * width) >= 0 &&
+          ((x - 0) + (z - 1) * width) < bounds)
+      {
+        value += heightmap[(x    ) + (z - 1) * width] as f32;
+        average += 1.0;
+      }
+
+      if (((x + 1) + (z - 1) * width) >= 0 &&
+          ((x + 1) + (z - 1) * width) < bounds)
+      {
+        value += heightmap[(x + 1) + (z - 1) * width] as f32;
+        average += 1.0;
+      }
+
+      // Sample middle row
+
+      if (((x - 1) + (z - 0) * width) >= 0 &&
+          ((x - 1) + (z - 0) * width) < bounds)
+      {
+        value += heightmap[(x - 1) + (z    ) * width] as f32;
+        average += 1.0;
+      }
+
+      // Sample center point (will always be in bounds)
+      value += heightmap[x + z * width] as f32;
+
+      if (((x + 1) + (z - 0) * width) >= 0 &&
+          ((x + 1) + (z - 0) * width) < bounds)
+      {
+        value += heightmap[(x + 1) + (z    ) * width] as f32;
+        average += 1.0;
+      }
+
+      // Sample bottom row
+
+      if (((x - 1) + (z + 1) * width) >= 0 &&
+          ((x - 1) + (z + 1) * width) < bounds)
+      {
+        value += heightmap[(x - 1) + (z + 1) * width] as f32;
+        average += 1.0;
+      }
+
+      if (((x - 0) + (z + 1) * width) >= 0 &&
+          ((x - 0) + (z + 1) * width) < bounds)
+      {
+        value += heightmap[(x    ) + (z + 1) * width] as f32;
+        average += 1.0;
+      }
+
+      if (((x + 1) + (z + 1) * width) >= 0 &&
+          ((x + 1) + (z + 1) * width) < bounds)
+      {
+        value += heightmap[(x + 1) + (z + 1) * width] as f32;
+        average += 1.0;
+      }
+
+      // Store the result
+      filtered_map.push(value / average)
+      // filtered_map[x + z * width] = value / average;
+    }
+  }
+  filtered_map
+}
+
+
 // Shader compilation and initialization  -- -- -- -- -- -- -- -- -- -- -- -- --
 
 fn load_shader_file(file_name: &str) -> ~str {
@@ -330,7 +430,8 @@ fn main() {
   // let heightmap = load_flat_map(width, height, 0);
 
   if DEBUG { print!("Computing vertices... "); flush(); }
-  let vertices = initialize_vertices(heightmap, width, height);
+  let filtered = box_filter_heightmap(heightmap, width, height, true);
+  let vertices = initialize_vertices(filtered, width, height);
   if DEBUG { println!("done. ({} vertices)", vertices.len()) }
 
   if DEBUG { print!("Computing texcoords... "); flush(); }
@@ -455,7 +556,7 @@ fn main() {
       in_translate_p = "in_translate".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
       gl::Uniform3f(in_translate_p, vs_translate.x, vs_translate.y, vs_translate.z);
 
-      initialize_sunlight(shader_program);
+      fiat_lux(shader_program);
 
       let position_p = "position".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
       let texcoord_p = "texcoord".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
@@ -554,7 +655,7 @@ unsafe fn initialize_vbo<T>(vec: ~[T], buf_id: &mut GLuint, array_type: GLenum) 
   gl::BufferData(array_type, vec_bytes, vec_ptr, gl::STATIC_DRAW);
 }
 
-unsafe fn initialize_sunlight(shader_program: GLuint) {
+unsafe fn fiat_lux(shader_program: GLuint) {
   in_sunlight_color_p     = "sunlight.color".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
   in_sunlight_direction_p = "sunlight.direction".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
   in_sunlight_intensity_p = "sunlight.intensity".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
