@@ -50,6 +50,7 @@ void main() {
 
   vec4 light = vec4(sunlight.color * (sunlight.intensity + diffuse_intensity), 1.0);
 
+  // out_color = color;
   out_color = tex * light * vec4(1.0, 1.0, 1.0, 1.0);
 
 }

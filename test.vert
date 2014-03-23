@@ -5,8 +5,8 @@
 // uniform mat4 model_matrix;
 
 layout (location = 0) in vec4 position;
-layout (location = 1) in vec2 texcoord;
-layout (location = 2) in vec3 normal;
+layout (location = 1) in vec3 normal;
+layout (location = 2) in vec2 texcoord;
 
 uniform float in_rotate_x;
 uniform float in_scale_all;
