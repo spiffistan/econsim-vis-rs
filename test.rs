@@ -25,19 +25,24 @@ use cgmath::projection::*;
 
 use gl::types::*;
 
+// -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+// Statics and globals
+
 static DEBUG: bool = true;
 
-static PNG_SRC: &'static str = "map.png";
+// static PNG_SRC: &'static str = "map.png";
 static TEX_SRC: &'static str = "grass2.png";
 // static MAP_SRC: &'static str = "elevation.data";
 // static MAP_W: uint = 2048;
 // static MAP_H: uint = 2048;
 // static MAP_SIZE: uint = MAP_W * MAP_H;
 
-static SCALE:   f32 = 512.0;
+static SCALE:   f32 = 64.0;
 static SCALE_X: f32 = SCALE;
 static SCALE_Y: f32 = SCALE;
 static SCALE_Z: f32 = 2000.0;
+
+static SCALE_MAX: f32 = 15.0;
 
 // Shader sources
 static VS_SRC: &'static str = "test.vert";
@@ -45,7 +50,7 @@ static FS_SRC: &'static str = "test.frag";
 
 // Globals
 static mut vs_rotation_x: f32 = 0.0;
-static mut vs_scale_all: f32 = 10.0;
+static mut vs_scale_all: f32 = 5.0;
 static mut vs_translate: Vec3<GLfloat> = Vec3 { x: -0.75, y: -0.5, z: 0.0 };
 
 // TODO: perhaps use this?
@@ -146,6 +151,21 @@ fn initialize_indices(width: u32, height: u32) -> ~[u32] {
     }
   }
   indices
+}
+
+fn initialize_texcoords(width: u32, height: u32) -> ~[Vec2<GLfloat>] {
+  let mut texcoords: ~[Vec2<GLfloat>] = ~[];
+
+  for x in range(0, width) {
+    for y in range(0, height) {
+
+      let u: f32 = if x % 2 == 0 { 0.0 } else { 1.0 };
+      let v: f32 = if y % 2 == 0 { 0.0 } else { 1.0 };
+
+      texcoords.push(Vec2::new(u, v));
+    }
+  }
+  texcoords
 }
 
 // fn initialize_normals(v: ~[Vec3<GLfloat>]) -> ~[Vec3<GLfloat>] {
@@ -257,6 +277,10 @@ fn main() {
   let vertices = initialize_vertices(heightmap, width, height);
   if DEBUG { println!("done. ({} vertices)", vertices.len()) }
 
+  if DEBUG { print!("Computing texcoords... "); flush(); }
+  let texcoords = initialize_texcoords(width, height);
+  if DEBUG { println!("done. ({} texcoords)", texcoords.len()) }
+
   if DEBUG { print!("Computing indices... "); flush(); }
   let indices = initialize_indices(width, height);
   if DEBUG { println!("done. ({} indices)", indices.len()) }
@@ -310,7 +334,7 @@ fn main() {
     glfw::window_hint::opengl_profile(glfw::OpenGlCoreProfile);
     glfw::window_hint::opengl_forward_compat(true);
 
-    let window = glfw::Window::create(1280, 720, "OpenGL", glfw::Windowed).unwrap();
+    let window = glfw::Window::create(1920, 1280, "OpenGL", glfw::Windowed).unwrap();
     window.set_key_polling(true);
     window.make_context_current();
 
@@ -329,7 +353,8 @@ fn main() {
     let mut vertex_array_id = 0;
     let mut vertex_buffer_id = 1;
     let mut index_buffer_id = 2;
-    let mut grass_texture_id = 3;
+    let mut texcoords_buffer_id = 3;
+    let mut grass_texture_id = 4;
     // let mut normal_buffer_id = 3;
 
     unsafe {
@@ -345,6 +370,14 @@ fn main() {
       gl::GenBuffers(1, &mut vertex_buffer_id);
       gl::BindBuffer(gl::ARRAY_BUFFER, vertex_buffer_id);
       gl::BufferData(gl::ARRAY_BUFFER, vertices_bytes, vertices_ptr, gl::STATIC_DRAW);
+
+      // Initialize vertex texcoords ///////////////////////////////////////////
+      // let texcoords_bytes = (texcoords.len() * mem::size_of::<Vec2<GLfloat>>()) as GLsizeiptr;
+      // let texcoords_ptr = cast::transmute(&texcoords[0]);
+      //
+      // gl::GenBuffers(1, &mut texcoords_buffer_id);
+      // gl::BindBuffer(gl::ARRAY_BUFFER, texcoords_buffer_id);
+      // gl::BufferData(gl::ARRAY_BUFFER, texcoords_bytes, texcoords_ptr, gl::STATIC_DRAW);
 
       // Initialize vertex indices /////////////////////////////////////////////
       let indices_bytes = (indices.len() * mem::size_of::<u32>()) as GLsizeiptr;
@@ -378,9 +411,6 @@ fn main() {
       gl::UseProgram(shader_program);
       "out_color".with_c_str(|ptr| gl::BindFragDataLocation(shader_program, 0, ptr));
 
-      let position_p = "position".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
-      //let normal_p = "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
-
       in_rotation_x_p = "in_rotate_x".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
       gl::Uniform1f(in_rotation_x_p, vs_rotation_x);
 
@@ -390,9 +420,15 @@ fn main() {
       in_translate_p = "in_translate".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
       gl::Uniform3f(in_translate_p, vs_translate.x, vs_translate.y, vs_translate.z);
 
+      let position_p = "position".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
+      let texcoord_p = "texcoord".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
+      //let normal_p = "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
+
       gl::EnableVertexAttribArray(position_p as GLuint);
+      //gl::EnableVertexAttribArray(texcoord_p as GLuint);
       //gl::EnableVertexAttribArray(normal_p as GLuint);
       gl::VertexAttribPointer(position_p as GLuint, 4, gl::FLOAT, gl::FALSE, 0, ptr::null());
+      // gl::VertexAttribPointer(texcoord_p as GLuint, 2, gl::FLOAT, gl::FALSE, 0, ptr::null());
       //gl::NormalPointer(normal_p as GLuint, 1, gl::FLOAT, gl::FALSE, 0, ptr::null());
 
       gl::Enable(gl::DEPTH_TEST);
@@ -439,6 +475,10 @@ impl glfw::ErrorCallback for ErrorContext {
     }
 }
 
+unsafe fn scale_world(factor: f32) {
+  if vs_scale_all + factor > 0.0 && vs_scale_all + factor < SCALE_MAX { vs_scale_all += factor }
+}
+
 fn handle_window_event(window: &glfw::Window, (time, event): (f64, glfw::WindowEvent)) {
   unsafe {
     match event {
@@ -461,14 +501,16 @@ fn handle_window_event(window: &glfw::Window, (time, event): (f64, glfw::WindowE
         println!("Time: {}, Key: {}, ScanCode: {}, Action: {}, Modifiers: [{}]", time, key, scancode, action, mods);
         match (key, action) {
           (glfw::KeyEscape, glfw::Press) => window.set_should_close(true),
-          (glfw::KeyW, glfw::Press) => { vs_translate.y += 0.1; println!("{}", vs_translate) },
-          (glfw::KeyS, glfw::Press) => { vs_translate.y -= 0.1; },
-          (glfw::KeyA, glfw::Press) => { vs_translate.x -= 0.1; },
-          (glfw::KeyD, glfw::Press) => { vs_translate.x += 0.1; },
-          (glfw::KeyDown, glfw::Press) => { vs_rotation_x  -= 5.0; },
-          (glfw::KeyUp, glfw::Press) => { vs_rotation_x += 5.0; },
-          (glfw::KeyR, glfw::Press) => { vs_scale_all   += 0.1; },
-          (glfw::KeyF, glfw::Press) => { vs_scale_all   -= 0.1; },
+          (glfw::KeyW, glfw::Repeat) => { vs_translate.y += 0.1; println!("{}", vs_translate) },
+          (glfw::KeyS, glfw::Repeat) => { vs_translate.y -= 0.1; },
+          (glfw::KeyA, glfw::Repeat) => { vs_translate.x -= 0.1; },
+          (glfw::KeyD, glfw::Repeat) => { vs_translate.x += 0.1; },
+          (glfw::KeyDown, glfw::Repeat) => { vs_rotation_x  -= 5.0; },
+          (glfw::KeyUp, glfw::Repeat) => { vs_rotation_x += 5.0; },
+          (glfw::KeyR, glfw::Press) => { scale_world(0.5); },
+          (glfw::KeyR, glfw::Repeat) => { scale_world(0.5); },
+          (glfw::KeyF, glfw::Press) => { scale_world(-0.5); },
+          (glfw::KeyF, glfw::Repeat) => { scale_world(-0.5); },
           (glfw::KeySpace, glfw::Press) => {
             // Resize should cause the window to "refresh"
             let (window_width, window_height) = window.get_size();

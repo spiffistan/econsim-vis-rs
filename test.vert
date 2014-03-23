@@ -6,6 +6,7 @@
 
 in vec3 position;
 in vec3 normal;
+in vec2 texcoord;
 
 uniform float in_rotate_x;
 uniform float in_scale_all;
@@ -29,6 +30,19 @@ mat4 view_frustum(
         vec4(0.0, 0.0,    (z_far+z_near)/(z_far-z_near), 1.0),
         vec4(0.0, 0.0, -2.0*z_far*z_near/(z_far-z_near), 0.0)
     );
+}
+
+mat4 rotate(vec3 axis, float angle)
+{
+    axis = normalize(axis);
+    float s = sin(angle);
+    float c = cos(angle);
+    float oc = 1.0 - c;
+
+    return mat4(oc * axis.x * axis.x + c,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,  0.0,
+                oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,  0.0,
+                oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c,           0.0,
+                0.0,                                0.0,                                0.0,                                1.0);
 }
 
 mat4 scale(float x, float y, float z) {
@@ -61,7 +75,7 @@ mat4 rotate_x(float theta) {
 
 void main() {
 
-  vs_out.vs_normal = normal;
+  // vs_out.vs_normal = normal;
   vs_out.vs_worldpos = position;
   vs_out.vs_uv = position.xy * vec2(0.5 * 64) + vec2(0.5 * 64);
 
@@ -74,12 +88,13 @@ void main() {
 
   mat4 projection = isometric * (1.0/sqrt(6));
 
-  vec4 projected_position = projection
-    // view_frustum(radians(45.0), 4.0/3.0, 0.0, 5.0 * in_scale_all)
-    * translate(in_translate.x, in_translate.y, in_translate.z)
-    * rotate_x(radians(in_rotate_x))
+  vec4 projected_position = // projection //view_frustum(radians(45.0), 4.0/3.0, 0.0, 5.0 * in_scale_all)
+    translate(in_translate.x, in_translate.y, in_translate.z)
+    //* rotate_x(radians(in_rotate_x))
     * scale(in_scale_all, in_scale_all, in_scale_all)
     //* scale(4.0/3.0,1.0,1.0)
+    * rotate(vec3(0,0,1), radians(15))
+
     * vec4(position.xy, position.z * -1, 1.0);
 
   float perspective_factor = 1.0; // projected_position.z * 0.5 + 1.0;
