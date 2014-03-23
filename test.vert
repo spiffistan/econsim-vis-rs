@@ -1,36 +1,36 @@
-#version 150
+#version 330
 
 // uniform mat4 projection_matrix;
 // uniform mat4 view_matrix;
 // uniform mat4 model_matrix;
 
-in vec3 position;
-in vec3 normal;
-in vec2 texcoord;
+layout (location = 0) in vec4 position;
+layout (location = 1) in vec2 texcoord;
+layout (location = 2) in vec3 normal;
 
 uniform float in_rotate_x;
 uniform float in_scale_all;
-uniform vec3 in_translate;
+uniform vec3  in_translate;
 
 out Vertex {
-  vec2 vs_uv;
-  vec3 vs_worldpos;
-  vec3 vs_normal;
+  vec4 position;
+  vec2 texcoord;
+  vec3 normal;
 } vs_out;
 
-mat4 view_frustum(
-    float angle_of_view,
-    float aspect_ratio,
-    float z_near,
-    float z_far
-) {
-    return mat4(
-        vec4(1.0/tan(angle_of_view),           0.0, 0.0, 0.0),
-        vec4(0.0, aspect_ratio/tan(angle_of_view),  0.0, 0.0),
-        vec4(0.0, 0.0,    (z_far+z_near)/(z_far-z_near), 1.0),
-        vec4(0.0, 0.0, -2.0*z_far*z_near/(z_far-z_near), 0.0)
-    );
-}
+// mat4 view_frustum(
+//     float angle_of_view,
+//     float aspect_ratio,
+//     float z_near,
+//     float z_far
+// ) {
+//     return mat4(
+//         vec4(1.0/tan(angle_of_view),           0.0, 0.0, 0.0),
+//         vec4(0.0, aspect_ratio/tan(angle_of_view),  0.0, 0.0),
+//         vec4(0.0, 0.0,    (z_far+z_near)/(z_far-z_near), 1.0),
+//         vec4(0.0, 0.0, -2.0*z_far*z_near/(z_far-z_near), 0.0)
+//     );
+// }
 
 mat4 rotate(vec3 axis, float angle)
 {
@@ -64,20 +64,20 @@ mat4 translate(float x, float y, float z) {
     );
 }
 
-mat4 rotate_x(float theta) {
-    return mat4(
-        vec4(1.0,         0.0,         0.0, 0.0),
-        vec4(0.0,  cos(theta),  sin(theta), 0.0),
-        vec4(0.0, -sin(theta),  cos(theta), 0.0),
-        vec4(0.0,         0.0,         0.0, 1.0)
-    );
-}
+// mat4 rotate_x(float theta) {
+//     return mat4(
+//         vec4(1.0,         0.0,         0.0, 0.0),
+//         vec4(0.0,  cos(theta),  sin(theta), 0.0),
+//         vec4(0.0, -sin(theta),  cos(theta), 0.0),
+//         vec4(0.0,         0.0,         0.0, 1.0)
+//     );
+// }
 
 void main() {
 
-  // vs_out.vs_normal = normal;
-  vs_out.vs_worldpos = position;
-  vs_out.vs_uv = position.xy * vec2(32) + vec2(32);
+  vs_out.normal = normal;
+  vs_out.position = position;
+  vs_out.texcoord = position.xy;
 
   mat4 isometric = mat4(
     vec4(sqrt(3),  0,       -sqrt(3),  0),
@@ -94,7 +94,7 @@ void main() {
     * scale(in_scale_all, in_scale_all, in_scale_all)
     //* scale(4.0/3.0,1.0,1.0)
     * rotate(vec3(0,0,1), radians(15))
-    * rotate(vec3(1,0,0), radians(15))
+    * rotate(vec3(1,0,0), radians(-15))
 
     * vec4(position.xyz, 1.0);
 

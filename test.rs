@@ -25,13 +25,12 @@ use cgmath::projection::*;
 
 use gl::types::*;
 
-// -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-// Statics and globals
+// Statics and globals  -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 static DEBUG: bool = true;
 
 static PNG_SRC: &'static str = "map.png";
-static TEX_SRC: &'static str = "grass2.png";
+static TEX_SRC: &'static str = "grass.png";
 // static MAP_SRC: &'static str = "elevation.data";
 // static MAP_W: uint = 2048;
 // static MAP_H: uint = 2048;
@@ -51,16 +50,28 @@ static SUNLIGHT_INTENSITY_MAX: f32 = 1.5;
 static VS_SRC: &'static str = "test.vert";
 static FS_SRC: &'static str = "test.frag";
 
-// Globals
+// Globals  -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
 static mut vs_rotation_x: f32 = 0.0;
 static mut vs_scale_all: f32 = 5.0;
 static mut vs_translate: Vec3<GLfloat> = Vec3 { x: -0.75, y: -0.5, z: 0.0 };
 
 static mut fs_sunlight: DirectionalLight = DirectionalLight {
   color:     Vec3 { x: 1.0, y: 1.0, z: 1.0 },
-  direction: Vec3 { x: 0.2, y: 0.2, z: -1.0 },
+  direction: Vec3 { x: 0.2, y: 0.5, z: -1.0 },
   intensity: 1.0
 };
+
+// Shader uniform pointers
+static mut in_rotation_x_p: i32 = 0;
+static mut in_scale_p: i32 = 0;
+static mut in_translate_p: i32 = 0;
+static mut in_sunlight_p: i32 = 0;
+static mut in_sunlight_color_p: i32 = 0;
+static mut in_sunlight_direction_p: i32 = 0;
+static mut in_sunlight_intensity_p: i32 = 0;
+
+// -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 // TODO: perhaps use this?
 //
@@ -84,7 +95,6 @@ static mut fs_sunlight: DirectionalLight = DirectionalLight {
 //   }
 // }
 
-// -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 struct DirectionalLight {
   color: Vec3<GLfloat>,
@@ -97,10 +107,20 @@ fn start(argc: int, argv: **u8) -> int {
   native::start(argc, argv, main)
 }
 
-fn load_png_image(path: &Path) -> png::Image {
-  let file = std::os::getcwd().join(Path::new(path));
+// Terrain initialization  -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+fn load_png_image(file_path: &str) -> png::Image {
+  let file = std::os::getcwd().join(Path::new(file_path));
   match png::load_png(&file) {
     Ok(image) => return image,
+    Err(s) => fail!(s)
+  }
+}
+
+fn load_height_data(file_path: &str, size: uint) -> ~[u8] {
+  let file = std::os::getcwd().join(Path::new(file_path));
+  match File::open(&file).read_bytes(size) {
+    Ok(res) => return res,
     Err(s) => fail!(s)
   }
 }
@@ -113,18 +133,7 @@ fn load_flat_map(height: u32, width: u32, depth: u8) -> ~[u8] {
   data
 }
 
-// fn load_heightmap() -> ~[u8] {
-//   let path = std::os::getcwd().join(Path::new(MAP_SRC));
-//   match File::open(&path).read_bytes(MAP_SIZE) {
-//     Ok(res) => return res,
-//     Err(_) => fail!("Could not load heightmap!")
-//   }
-// }
-
-// TODO XXX
-fn move_camera() {
-
-}
+// Vertex, Normal and Texture initialization -- -- -- -- -- -- -- -- -- -- -- --
 
 fn initialize_vertices(heightmap: ~[u8], width: u32, height: u32) -> ~[Vec4<GLfloat>] {
   let mut vertices: ~[Vec4<GLfloat>] = ~[];
@@ -183,42 +192,45 @@ fn initialize_texcoords(width: u32, height: u32) -> ~[Vec2<GLfloat>] {
   texcoords
 }
 
-// fn initialize_normals(v: ~[Vec3<GLfloat>]) -> ~[Vec3<GLfloat>] {
-//   let mut normals: ~[Vec3<GLfloat>] = ~[];
-//
-//   for row in range(0, MAP_W-1) {
-//     for col in range(0, MAP_H-1) {
-//
-//       let hr = MAP_W * row;
-//       let hc = col;
-//
-//       let mut sum = Vec3::new(0f32, 0f32, 0f32);
-//       let cur = v[hr+hc];
-//
-//       if row+1 < MAP_W && col+1 < MAP_H {
-//         sum = sum + (v[hr+0 + hc+1] - cur).cross(&(v[hr+1 + hc+0] - cur)).normalize();
-//       }
-//
-//       if row+1 < MAP_W && col > 0 {
-//         sum = sum + (v[hr+1 + hc+0] - cur).cross(&(v[hr+0 + hc+1] - cur)).normalize();
-//       }
-//
-//       if row > 0 && col > 0 {
-//         sum = sum + (v[hr+0 + hc+1] - cur).cross(&(v[hr+1 + hc+0] - cur)).normalize();
-//       }
-//
-//       if row > 0 && col+1 < MAP_H {
-//         sum = sum + (v[hr+1 + hc+0] - cur).cross(&(v[hr+0 + hc+1] - cur)).normalize();
-//       }
-//
-//       normals.push(sum.normalize());
-//     }
-//   }
-//   normals
-// }
+fn initialize_normals(v: ~[Vec4<GLfloat>], width: u32, height: u32) -> ~[Vec3<GLfloat>] {
+  let mut normals: ~[Vec3<GLfloat>] = ~[];
+
+  for row in range(0, width-1) {
+    for col in range(0, height-1) {
+
+      // let hr = width * row;
+      // let hc = col;
+      //
+      // let mut sum = Vec3::new(0f32, 0f32, 0f32);
+      // let cur = v[hr+hc].truncate();
+      //
+      // if row+1 < width && col+1 < height {
+      //   sum = sum + (v[hr+0 + hc+1].truncate() - cur).cross(&(v[hr+1 + hc+0].truncate() - cur)).normalize();
+      // }
+      //
+      // if row+1 < width && col > 0 {
+      //   sum = sum + (v[hr+1 + hc+0].truncate() - cur).cross(&(v[hr+0 + hc+1].truncate() - cur)).normalize();
+      // }
+      //
+      // if row > 0 && col > 0 {
+      //   sum = sum + (v[hr+0 + hc+1].truncate() - cur).cross(&(v[hr+1 + hc+0].truncate() - cur)).normalize();
+      // }
+      //
+      // if row > 0 && col+1 < height {
+      //   sum = sum + (v[hr+1 + hc+0].truncate() - cur).cross(&(v[hr+0 + hc+1].truncate() - cur)).normalize();
+      // }
+      //
+      // sum = sum.normalize();
+      //
+      // normals.push(Vec3::new(sum.x, sum.y, sum.z));
+      normals.push(Vec3::new(0f32, 1f32, 0f32))
+    }
+  }
+  normals
+}
 
 
-// -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+// Shader compilation and initialization  -- -- -- -- -- -- -- -- -- -- -- -- --
 
 fn load_shader_file(file_name: &str) -> ~str {
   let p = std::os::getcwd().join(Path::new(file_name));
@@ -273,11 +285,13 @@ fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
   program
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 fn main() {
 
   // if DEBUG { print!("Loading heightmap from png: {}... ", PNG_SRC); flush(); }
   //
-  // let image = load_png_image(&Path::new(PNG_SRC));
+  // let image = load_png_image(PNG_SRC.to_owned());
   // let heightmap = image.pixels.clone();
   // let width = image.width.clone();
   // let height = image.height.clone();
@@ -300,9 +314,9 @@ fn main() {
   let indices = initialize_indices(width, height);
   if DEBUG { println!("done. ({} indices)", indices.len()) }
 
-  // if DEBUG { print!("Computing normals... "); flush(); }
-  // let normals  = initialize_normals(vertices.clone());
-  // if DEBUG { println!("done. ({} normals)", normals.len()) }
+  if DEBUG { print!("Computing normals... "); flush(); }
+  let normals  = initialize_normals(vertices.clone(), width, height);
+  if DEBUG { println!("done. ({} normals)", normals.len()) }
 
   // let mut field_of_view:      f32 = 60.0;
   // let mut aspect_ratio:       f32 = width as f32 / height as f32;
@@ -335,8 +349,6 @@ fn main() {
   // projection_matrix.c3r2 = -((2 * near_plane * far_plane) / frustum_length);
   // projection_matrix.c3r3 = 0.0;
 
-
-
   // Start OpenGL -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
   let vs_src = load_shader_file(VS_SRC);
@@ -363,20 +375,12 @@ fn main() {
     let fragment_shader = compile_shader(fs_src, gl::FRAGMENT_SHADER);
     let shader_program = link_program(vertex_shader, fragment_shader);
 
-    let mut in_rotation_x_p: i32 = 0;
-    let mut in_scale_p: i32 = 0;
-    let mut in_translate_p: i32 = 0;
-    let mut in_sunlight_p: i32 = 0;
-    let mut in_sunlight_color_p: i32 = 0;
-    let mut in_sunlight_direction_p: i32 = 0;
-    let mut in_sunlight_intensity_p: i32 = 0;
-
     let mut vertex_array_id = 0;
     let mut vertex_buffer_id = 1;
     let mut index_buffer_id = 2;
     let mut texcoords_buffer_id = 3;
     let mut grass_texture_id = 4;
-    // let mut normal_buffer_id = 3;
+    let mut normal_buffer_id = 5;
 
     unsafe {
 
@@ -384,23 +388,12 @@ fn main() {
       gl::GenVertexArrays(1, &mut vertex_array_id);
       gl::BindVertexArray(vertex_array_id);
 
-      // Initialize vertex positions ///////////////////////////////////////////
-      let vertices_bytes = (vertices.len() * mem::size_of::<Vec4<GLfloat>>()) as GLsizeiptr;
-      let vertices_ptr = cast::transmute(&vertices[0]);
+      initialize_vbo(vertices, &mut vertex_buffer_id, gl::ARRAY_BUFFER);
+      initialize_vbo(texcoords, &mut texcoords_buffer_id, gl::ARRAY_BUFFER);
+      initialize_vbo(normals, &mut normal_buffer_id, gl::ARRAY_BUFFER);
+      // initialize_vbo(indices, &mut index_buffer_id, gl::ELEMENT_ARRAY_BUFFER);
 
-      gl::GenBuffers(1, &mut vertex_buffer_id);
-      gl::BindBuffer(gl::ARRAY_BUFFER, vertex_buffer_id);
-      gl::BufferData(gl::ARRAY_BUFFER, vertices_bytes, vertices_ptr, gl::STATIC_DRAW);
-
-      // Initialize vertex texcoords ///////////////////////////////////////////
-      // let texcoords_bytes = (texcoords.len() * mem::size_of::<Vec2<GLfloat>>()) as GLsizeiptr;
-      // let texcoords_ptr = cast::transmute(&texcoords[0]);
-      //
-      // gl::GenBuffers(1, &mut texcoords_buffer_id);
-      // gl::BindBuffer(gl::ARRAY_BUFFER, texcoords_buffer_id);
-      // gl::BufferData(gl::ARRAY_BUFFER, texcoords_bytes, texcoords_ptr, gl::STATIC_DRAW);
-
-      // Initialize vertex indices /////////////////////////////////////////////
+      // // Initialize vertex indices /////////////////////////////////////////////
       let indices_bytes = (indices.len() * mem::size_of::<u32>()) as GLsizeiptr;
       let indices_ptr = cast::transmute(&indices[0]);
 
@@ -408,25 +401,18 @@ fn main() {
       gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, index_buffer_id);
       gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, indices_bytes, indices_ptr, gl::STATIC_DRAW);
 
-      // Initialize vertex normals /////////////////////////////////////////////
-      // gl::BindBuffer(gl::ARRAY_BUFFER, normal_buffer_id);
-      // gl::BufferData(gl::ARRAY_BUFFER,
-      //                (normals.len() * mem::size_of::<Vec3<GLfloat>>()) as GLsizeiptr,
-      //                cast::transmute(&normals[0]),
-      //                gl::STATIC_DRAW);
-
       gl::GenTextures(1, &mut grass_texture_id);
       gl::BindTexture(gl::TEXTURE_2D, grass_texture_id);
 
-      let tex = load_png_image(&Path::new(TEX_SRC));
+      let tex = load_png_image(TEX_SRC);
       let tex_height = tex.height.clone();
       let tex_width = tex.width.clone();
       let data = tex.pixels;
 
       gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGBA as GLint, tex_width as GLint, tex_height as GLint, 0, gl::RGBA, gl::UNSIGNED_BYTE, data.as_ptr() as GLeglImageOES);
 
-      gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
-      gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+      gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+      gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
       gl::GenerateMipmap(gl::TEXTURE_2D);
 
       // Use shader program
@@ -442,26 +428,23 @@ fn main() {
       in_translate_p = "in_translate".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
       gl::Uniform3f(in_translate_p, vs_translate.x, vs_translate.y, vs_translate.z);
 
-      in_sunlight_color_p     = "sunlight.color".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
-      in_sunlight_direction_p = "sunlight.direction".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
-      in_sunlight_intensity_p = "sunlight.intensity".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
-
-      gl::Uniform3f(in_sunlight_color_p, fs_sunlight.color.x, fs_sunlight.color.x, fs_sunlight.color.x);
-      gl::Uniform3f(in_sunlight_direction_p, fs_sunlight.direction.x, fs_sunlight.direction.x, fs_sunlight.direction.x);
-      gl::Uniform1f(in_sunlight_intensity_p, fs_sunlight.intensity);
+      initialize_sunlight(shader_program);
 
       let position_p = "position".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
       let texcoord_p = "texcoord".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
-      //let normal_p = "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
+      let normal_p =   "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
 
-      gl::EnableVertexAttribArray(position_p as GLuint);
-      //gl::EnableVertexAttribArray(texcoord_p as GLuint);
-      //gl::EnableVertexAttribArray(normal_p as GLuint);
-      gl::VertexAttribPointer(position_p as GLuint, 4, gl::FLOAT, gl::FALSE, 0, ptr::null());
-      // gl::VertexAttribPointer(texcoord_p as GLuint, 2, gl::FLOAT, gl::FALSE, 0, ptr::null());
-      //gl::NormalPointer(normal_p as GLuint, 1, gl::FLOAT, gl::FALSE, 0, ptr::null());
+      gl::EnableVertexAttribArray(0);
+      gl::EnableVertexAttribArray(1);
+      gl::EnableVertexAttribArray(2);
+      gl::VertexAttribPointer(0, 4, gl::FLOAT, gl::FALSE, 0, ptr::null());
+      gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, 0, ptr::null());
+      gl::VertexAttribPointer(2, 3, gl::FLOAT, gl::FALSE, 1, ptr::null());
 
       gl::Enable(gl::DEPTH_TEST);
+      gl::Enable(gl::CULL_FACE);
+      gl::CullFace(gl::BACK);
+      gl::FrontFace(gl::CW);
     }
 
     while !window.should_close() {
@@ -470,6 +453,7 @@ fn main() {
       for event in window.flush_events() {
         handle_window_event(&window, event);
         unsafe {
+          // Update the globals
           gl::Uniform1f(in_rotation_x_p, vs_rotation_x);
           gl::Uniform1f(in_scale_p, vs_scale_all);
           gl::Uniform3f(in_translate_p, vs_translate.x, vs_translate.y, vs_translate.z);
@@ -510,13 +494,38 @@ impl glfw::ErrorCallback for ErrorContext {
     }
 }
 
+// OpenGL initializers  -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+unsafe fn initialize_vbo<T>(vec: ~[T], buf_id: &mut GLuint, array_type: u32) {
+  let vec_bytes = (vec.len() * mem::size_of::<T>()) as GLsizeiptr;
+  let vec_ptr = cast::transmute(&vec[0]);
+
+  gl::GenBuffers(1, buf_id);
+  gl::BindBuffer(array_type, *buf_id);
+  gl::BufferData(array_type, vec_bytes, vec_ptr, gl::STATIC_DRAW);
+}
+
+unsafe fn initialize_sunlight(shader_program: GLuint) {
+  in_sunlight_color_p     = "sunlight.color".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+  in_sunlight_direction_p = "sunlight.direction".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+  in_sunlight_intensity_p = "sunlight.intensity".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+
+  gl::Uniform3f(in_sunlight_color_p, fs_sunlight.color.x, fs_sunlight.color.x, fs_sunlight.color.x);
+  gl::Uniform3f(in_sunlight_direction_p, fs_sunlight.direction.x, fs_sunlight.direction.x, fs_sunlight.direction.x);
+  gl::Uniform1f(in_sunlight_intensity_p, fs_sunlight.intensity);
+}
+
+// Event handling -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
 unsafe fn move_world(x_factor: f32, y_factor: f32) {
   vs_translate.x += x_factor;
   vs_translate.y += y_factor;
 }
 
 unsafe fn scale_world(factor: f32) {
-  if vs_scale_all + factor > 0.0 && vs_scale_all + factor < SCALE_MAX { vs_scale_all += factor }
+  if vs_scale_all + factor > 0.0 && vs_scale_all + factor < SCALE_MAX {
+    vs_scale_all += factor
+  }
 }
 
 unsafe fn adjust_light_intensity(factor: f32) {
@@ -525,7 +534,6 @@ unsafe fn adjust_light_intensity(factor: f32) {
     fs_sunlight.intensity += factor
   }
 }
-
 
 fn handle_window_event(window: &glfw::Window, (time, event): (f64, glfw::WindowEvent)) {
   unsafe {
@@ -568,8 +576,9 @@ fn handle_window_event(window: &glfw::Window, (time, event): (f64, glfw::WindowE
           (glfw::KeyK, glfw::Repeat)     => { adjust_light_intensity(-0.02) },
           (glfw::KeyL, glfw::Repeat)     => { adjust_light_intensity(0.02) },
 
-          (glfw::KeyDown, glfw::Repeat)  => { vs_rotation_x  -= 5.0; },
+          (glfw::KeyDown, glfw::Repeat)  => { vs_rotation_x -= 5.0; },
           (glfw::KeyUp, glfw::Repeat)    => { vs_rotation_x += 5.0; },
+
           (glfw::KeySpace, glfw::Press) => {
             // Resize should cause the window to "refresh"
             let (window_width, window_height) = window.get_size();

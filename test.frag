@@ -10,15 +10,15 @@ uniform struct SimpleDirectionalLight {
 } sunlight;
 
 in Vertex {
-  vec2 vs_uv;
-  vec3 vs_worldpos;
-  vec3 vs_normal;
+  vec4 position;
+  vec2 texcoord;
+  vec3 normal;
 } vs_out;
 
 void main() {
 
   vec4 color;
-  float z = vs_out.vs_worldpos.z;
+  float z = vs_out.position.z;
   float res = 0.125;
 
   vec4 water = vec4(0.0, 0.0, 0.5, 1.0);
@@ -45,8 +45,8 @@ void main() {
   color = mix(color, rock,  smoothstep(s_dirt,  s_rock,  z));
   color = mix(color, snow,  smoothstep(s_rock,  res,     z));
 
-  vec4 tex = texture(sampler, vs_out.vs_uv);
-  float diffuse_intensity = max(0.0, dot(normalize(vs_out.vs_worldpos), -sunlight.direction));
+  vec4 tex = texture(sampler, vs_out.texcoord);
+  float diffuse_intensity = max(0.0, dot(normalize(vs_out.normal), -sunlight.direction));
 
   vec4 light = vec4(sunlight.color * (sunlight.intensity + diffuse_intensity), 1.0);
 
