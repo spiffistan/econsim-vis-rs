@@ -27,27 +27,31 @@ in Vertex {
 //   return ( dot_product < 0.0f ) ? -face_normal : face_normal;
 // }
 
+vec4 rgba2vec4(int r, int g, int b, int a) {
+  return vec4(r/256.0, g/256.0, b/256.0, a/256.0);
+}
+
 void main() {
 
   vec4 color;
   float z = vs_out.position.z;
   float res = 1;
 
-  vec4 water = vec4(0.0, 0.0, 0.5, 1.0);
-  vec4 shore = vec4(0.0, 0.5, 1.0, 1.0);
-  vec4 sand  = vec4(0.9, 0.9, 0.2, 1.0);
+  vec4 water = rgba2vec4(3,22,52,1);
+  vec4 shore = rgba2vec4(3,54,73,1);
+  vec4 sand  = rgba2vec4(3,101,100,1);
 
   vec4 grass = vec4(0.1, 0.6, 0.0, 1.0);
   vec4 dirt  = vec4(0.8, 0.8, 0.0, 1.0);
   vec4 rock  = vec4(0.5, 0.5, 0.5, 1.0);
   vec4 snow  = vec4(1.0, 1.0, 1.0, 1.0);
 
-  float s_water = res * 0.05;
-  float s_shore = res * 0.10;
-  float s_sand  = res * 0.15;
-  float s_grass = res * 0.22;
-  float s_dirt  = res * 0.50;
-  float s_rock  = res * 0.75;
+  float s_water = res * 0.03;
+  float s_shore = res * 0.04;
+  float s_sand  = res * 0.045;
+  float s_grass = res * 0.09;
+  float s_dirt  = res * 0.60;
+  float s_rock  = res * 0.78;
   float s_snow  = res * 0.99;
 
   color = mix(water, shore, smoothstep(s_water, s_shore, z));
@@ -57,7 +61,7 @@ void main() {
   color = mix(color, rock,  smoothstep(s_dirt,  s_rock,  z));
   color = mix(color, snow,  smoothstep(s_rock,  res,     z));
 
-  vec4 tex = texture(sampler, vs_out.position.xy * vec2(512));
+  // vec4 tex = texture(sampler, vs_out.position.xy * vec2(512));
   float diffuse_intensity = max(0.0, dot(normalize(vs_out.normal), -sunlight.direction));
 
   vec4 light = vec4(sunlight.color * (sunlight.intensity + diffuse_intensity), 1.0);

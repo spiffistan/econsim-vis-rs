@@ -1,36 +1,21 @@
 #version 330
 
-// uniform mat4 projection_matrix;
-// uniform mat4 view_matrix;
-// uniform mat4 model_matrix;
-
 layout (location = 0) in vec4 position;
 layout (location = 1) in vec3 normal;
 layout (location = 2) in vec2 texcoord;
 
-uniform float in_rotate_x;
-uniform float in_scale_all;
-uniform vec3  in_translate;
+uniform mat4 projection_matrix;
+// uniform mat4 view_matrix;
+// uniform mat4 model_matrix;
+
+uniform vec3 scaling;
+uniform vec3 translation;
 
 out Vertex {
   vec4 position;
   vec2 texcoord;
   vec3 normal;
 } vs_out;
-
-// mat4 view_frustum(
-//     float angle_of_view,
-//     float aspect_ratio,
-//     float z_near,
-//     float z_far
-// ) {
-//     return mat4(
-//         vec4(1.0/tan(angle_of_view),           0.0, 0.0, 0.0),
-//         vec4(0.0, aspect_ratio/tan(angle_of_view),  0.0, 0.0),
-//         vec4(0.0, 0.0,    (z_far+z_near)/(z_far-z_near), 1.0),
-//         vec4(0.0, 0.0, -2.0*z_far*z_near/(z_far-z_near), 0.0)
-//     );
-// }
 
 mat4 rotate(vec3 axis, float angle)
 {
@@ -64,35 +49,16 @@ mat4 translate(float x, float y, float z) {
     );
 }
 
-// mat4 rotate_x(float theta) {
-//     return mat4(
-//         vec4(1.0,         0.0,         0.0, 0.0),
-//         vec4(0.0,  cos(theta),  sin(theta), 0.0),
-//         vec4(0.0, -sin(theta),  cos(theta), 0.0),
-//         vec4(0.0,         0.0,         0.0, 1.0)
-//     );
-// }
-
 void main() {
 
   vs_out.normal = normal;
   vs_out.position = position;
   vs_out.texcoord = texcoord;
 
-  mat4 isometric = mat4(
-    vec4(sqrt(3),  0,       -sqrt(3),  0),
-    vec4(1.0,      2.0,      1.0,      0),
-    vec4(sqrt(2),  -sqrt(2), sqrt(2),  0),
-    vec4(0,        0,        0,        1)
-  );
-
-  mat4 projection = isometric * (1.0/sqrt(6));
-
-  vec4 projected_position = // projection //view_frustum(radians(45.0), 4.0/3.0, 0.0, 5.0 * in_scale_all)
-    translate(in_translate.x, in_translate.y, in_translate.z)
-    //* rotate_x(radians(in_rotate_x))
-    * scale(in_scale_all, in_scale_all, 1.0)
-    //* scale(4.0/3.0,1.0,1.0)
+  vec4 projected_position =
+    translate(translation.x, translation.y, translation.z)
+    * scale(scaling.x, scaling.y, 1.0)
+    // * projection_matrix
     * rotate(vec3(0,0,1), radians(15))
     * rotate(vec3(1,0,0), radians(-15))
     * vec4(position.xy, position.z * -1.0,  1.0);

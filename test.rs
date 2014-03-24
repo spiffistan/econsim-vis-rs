@@ -42,6 +42,7 @@ static SCALE_Y: f32 = SCALE;
 static SCALE_Z: f32 = 256.0;
 
 static SCROLL_SPEED: f32 = 0.1;
+static SCALE_MIN: f32 = 0.0;
 static SCALE_MAX: f32 = 25.0;
 static SUNLIGHT_INTENSITY_MIN: f32 = 0.5;
 static SUNLIGHT_INTENSITY_MAX: f32 = 1.5;
@@ -49,31 +50,66 @@ static SUNLIGHT_INTENSITY_MAX: f32 = 1.5;
 // Shader sources
 static VS_SRC: &'static str = "test.vert";
 static FS_SRC: &'static str = "test.frag";
+static GS_SRC: &'static str = "test.geom";
 
 // Globals  -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 static mut draw_loops: bool = false;
 
-static mut vs_rotation_x: f32 = 0.0;
-static mut vs_scale_all: f32 = 5.0;
-static mut vs_translate: Vec3<GLfloat> = Vec3 { x: -0.75, y: -0.5, z: 0.0 };
-
-static mut fs_sunlight: DirectionalLight = DirectionalLight {
-  color:     Vec3 { x:  1.0, y:  1.0, z:  1.0 },
-  direction: Vec3 { x:  0.2, y:  0.5, z: -1.0 },
-  intensity: 1.0
+static mut world: World = World {
+  rotation:           Vec3 { x: 0.0, y: 0.0, z: 0.0 },
+  scale:              Vec3 { x: 1.0, y: 1.0, z: 1.0 },
+  translation:        Vec3 { x: 0.0, y: 0.0, z: 0.0 },
+  projection_matrix:  Mat4 {
+    x: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+    y: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+    z: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+    w: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 }
+  },
+  sunlight:           DirectionalLight {
+    color:     Vec3 { x:  1.0, y:  1.0, z:  1.0 },
+    direction: Vec3 { x:  0.2, y:  0.5, z: -1.0 },
+    intensity: 1.0
+  }
 };
 
-// Shader uniform pointers
-static mut in_rotation_x_p: i32 = 0;
-static mut in_scale_p: i32 = 0;
-static mut in_translate_p: i32 = 0;
-static mut in_sunlight_p: i32 = 0;
-static mut in_sunlight_color_p: i32 = 0;
-static mut in_sunlight_direction_p: i32 = 0;
-static mut in_sunlight_intensity_p: i32 = 0;
+static mut vs_data: VertexShaderData = VertexShaderData {
+  rotation: 0,
+  scale: 0,
+  translation: 0,
+  projection_matrix: 0
+};
+
+static mut fs_data: FragmentShaderData = FragmentShaderData {
+  sunlight: 0,
+  sunlight_color: 0,
+  sunlight_direction: 0,
+  sunlight_intensity: 0
+};
 
 // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+struct World {
+  rotation:     Vec3<f32>,
+  scale:        Vec3<f32>,
+  translation:  Vec3<f32>,
+  projection_matrix: Mat4<f32>,
+  sunlight: DirectionalLight
+}
+
+struct VertexShaderData {
+  rotation: i32,
+  scale: i32,
+  translation: i32,
+  projection_matrix: i32
+}
+
+struct FragmentShaderData {
+  sunlight: i32,
+  sunlight_color: i32,
+  sunlight_direction: i32,
+  sunlight_intensity: i32
+}
 
 struct DirectionalLight {
   color:     Vec3<GLfloat>,
@@ -81,8 +117,6 @@ struct DirectionalLight {
   intensity: GLfloat
 }
 
-// TODO: perhaps use this?
-//
 // Vertex-Normal-Texture
 pub struct Vnt {
   position: Vec4<GLfloat>,
@@ -363,7 +397,7 @@ fn load_shader_file(file_name: &str) -> ~str {
   let p = std::os::getcwd().join(Path::new(file_name));
   match File::open(&p).read_to_end() {
     Ok(s) => str::from_utf8_owned(s).unwrap(),
-    Err(_) => fail!("Could not read shader file!")
+    Err(s) => fail!(s)
   }
 }
 
@@ -450,41 +484,13 @@ fn main() {
   let vnts = initialize_vnts(vertices.clone(), normals.clone(), texcoords.clone());
   if DEBUG { println!("done. ({} VNTs, {} bytes)", vnts.len(), mem::size_of::<Vnt>() * vnts.len()) }
 
-  // let mut field_of_view:      f32 = 60.0;
-  // let mut aspect_ratio:       f32 = width as f32 / height as f32;
-  // let mut near_plane:         f32 = 0.1;
-  // let mut far_plane:          f32 = 5.0;
-  // let mut frustum_length:     f32 = far_plane - near_plane;
-  // let mut y_scale:            f32 = cot(deg(field_of_view / 2.0).to_rad());
-  // let mut x_scale:            f32 = y_scale / aspect_ratio;
-  //
-  // let mut matrix_44_buf:      ~[GLfloat] = ~[0f32, ..16]; // XXX Needed?
-  //
-  // let mut view_matrix:        Mat4<GLfloat> = Mat4::zero();
-  // let mut model_matrix:       Mat4<GLfloat> = Mat4::zero();
-  //
-  // let c2r2: f32 = -((far_plane + near_plane) / frustum_length);
-  // let c3r2: f32 = -((2.0 * near_plane * far_plane) / frustum_length);
-  //
-  // let mut projection_matrix:  Mat4<GLfloat> = Mat4::new(
-  //   x_scale, 0.0,     0.0,      0.0,
-  //   0.0,     y_scale, 0.0,      0.0,
-  //   0.0,     0.0,     c2r2,    -1.0,
-  //   0.0,     0.0,     c3r2,     0.0
-  // );
-
-  // cgmath doesn't seem to be able to update individual cells (yet?)
-  // projection_matrix.c0r0 = x_scale;
-  // projection_matrix.c1r1 = y_scale;
-  // projection_matrix.c2r2 = -((far_plane + near_plane) / frustum_length);
-  // projection_matrix.c2r3 = -1.0;
-  // projection_matrix.c3r2 = -((2 * near_plane * far_plane) / frustum_length);
-  // projection_matrix.c3r3 = 0.0;
+  unsafe { initialize_world() }
 
   // Start OpenGL -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
   let vs_src = load_shader_file(VS_SRC);
   let fs_src = load_shader_file(FS_SRC);
+  let gs_src = load_shader_file(GS_SRC);
 
   glfw::set_error_callback(~ErrorContext);
 
@@ -503,9 +509,10 @@ fn main() {
     gl::load_with(glfw::get_proc_address);
 
     // Create GLSL shaders
-    let vertex_shader = compile_shader(vs_src, gl::VERTEX_SHADER);
+    let vertex_shader   = compile_shader(vs_src, gl::VERTEX_SHADER);
     let fragment_shader = compile_shader(fs_src, gl::FRAGMENT_SHADER);
-    let shader_program = link_program(vertex_shader, fragment_shader);
+    // let geometry_shader = compile_shader(gs_src, gl::GEOMETRY_SHADER);
+    let shader_program = link_program(vertex_shader, fragment_shader); // , geometry_shader);
 
     let mut vertex_array_id = 0;
     let mut vnt_buffer_id = 1;
@@ -545,22 +552,8 @@ fn main() {
 
       // Use shader program
       gl::UseProgram(shader_program);
-      "out_color".with_c_str(|ptr| gl::BindFragDataLocation(shader_program, 0, ptr));
 
-      in_rotation_x_p = "in_rotate_x".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
-      gl::Uniform1f(in_rotation_x_p, vs_rotation_x);
-
-      in_scale_p = "in_scale_all".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
-      gl::Uniform1f(in_scale_p, vs_scale_all);
-
-      in_translate_p = "in_translate".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
-      gl::Uniform3f(in_translate_p, vs_translate.x, vs_translate.y, vs_translate.z);
-
-      fiat_lux(shader_program);
-
-      let position_p = "position".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
-      let texcoord_p = "texcoord".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
-      let normal_p =   "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
+      initialize_shader_data(shader_program);
 
       gl::EnableVertexAttribArray(0);
 
@@ -600,15 +593,7 @@ fn main() {
       glfw::poll_events();
       for event in window.flush_events() {
         handle_window_event(&window, event);
-        unsafe {
-          // Update the globals
-          gl::Uniform1f(in_rotation_x_p, vs_rotation_x);
-          gl::Uniform1f(in_scale_p, vs_scale_all);
-          gl::Uniform3f(in_translate_p, vs_translate.x, vs_translate.y, vs_translate.z);
-          gl::Uniform3f(in_sunlight_color_p, fs_sunlight.color.x, fs_sunlight.color.x, fs_sunlight.color.x);
-          gl::Uniform3f(in_sunlight_direction_p, fs_sunlight.direction.x, fs_sunlight.direction.x, fs_sunlight.direction.x);
-          gl::Uniform1f(in_sunlight_intensity_p, fs_sunlight.intensity);
-        }
+        unsafe { update_world() }
       }
 
       // Clear the screen to black
@@ -655,33 +640,55 @@ unsafe fn initialize_vbo<T>(vec: ~[T], buf_id: &mut GLuint, array_type: GLenum) 
   gl::BufferData(array_type, vec_bytes, vec_ptr, gl::STATIC_DRAW);
 }
 
-unsafe fn fiat_lux(shader_program: GLuint) {
-  in_sunlight_color_p     = "sunlight.color".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
-  in_sunlight_direction_p = "sunlight.direction".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
-  in_sunlight_intensity_p = "sunlight.intensity".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+unsafe fn initialize_world() {
+  world.projection_matrix = ortho::<f32>(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
+}
 
-  gl::Uniform3f(in_sunlight_color_p, fs_sunlight.color.x, fs_sunlight.color.x, fs_sunlight.color.x);
-  gl::Uniform3f(in_sunlight_direction_p, fs_sunlight.direction.x, fs_sunlight.direction.x, fs_sunlight.direction.x);
-  gl::Uniform1f(in_sunlight_intensity_p, fs_sunlight.intensity);
+unsafe fn update_world() {
+  gl::Uniform3f(vs_data.scale, world.scale.x, world.scale.y, world.scale.z);
+  gl::Uniform3f(vs_data.translation, world.translation.x, world.translation.y, world.translation.z);
+  gl::UniformMatrix4fv(vs_data.projection_matrix, 1, gl::FALSE, world.projection_matrix.cr(0,0));
+  gl::Uniform3f(fs_data.sunlight_color, world.sunlight.color.x, world.sunlight.color.y, world.sunlight.color.z);
+  gl::Uniform3f(fs_data.sunlight_direction, world.sunlight.direction.x, world.sunlight.direction.y, world.sunlight.direction.z);
+  gl::Uniform1f(fs_data.sunlight_intensity, world.sunlight.intensity);
+}
+
+unsafe fn initialize_shader_data(shader_program: GLuint) {
+  vs_data.scale              = "scaling".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+  vs_data.translation        = "translation".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+  vs_data.projection_matrix  = "projection_matrix".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+  fs_data.sunlight_color     = "sunlight.color".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+  fs_data.sunlight_direction = "sunlight.direction".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+  fs_data.sunlight_intensity = "sunlight.intensity".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+
+  "position".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
+  "texcoord".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
+  "normal".with_c_str(|ptr| gl::GetAttribLocation(shader_program, ptr));
+
+  "out_color".with_c_str(|ptr| gl::BindFragDataLocation(shader_program, 0, ptr));
 }
 
 // Event handling -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 unsafe fn move_world(x_factor: f32, y_factor: f32) {
-  vs_translate.x += x_factor;
-  vs_translate.y += y_factor;
+  world.translation.x += x_factor;
+  world.translation.y += y_factor;
 }
 
 unsafe fn scale_world(factor: f32) {
-  if vs_scale_all + factor > 0.0 && vs_scale_all + factor < SCALE_MAX {
-    vs_scale_all += factor
+  if world.scale.x + factor > SCALE_MIN
+  && world.scale.x + factor < SCALE_MAX
+  && world.scale.y + factor > SCALE_MIN
+  && world.scale.y + factor < SCALE_MAX {
+    world.scale.x += factor;
+    world.scale.y += factor;
   }
 }
 
 unsafe fn adjust_light_intensity(factor: f32) {
-  if fs_sunlight.intensity + factor > SUNLIGHT_INTENSITY_MIN
-  && fs_sunlight.intensity + factor < SUNLIGHT_INTENSITY_MAX {
-    fs_sunlight.intensity += factor
+  if world.sunlight.intensity + factor > SUNLIGHT_INTENSITY_MIN
+  && world.sunlight.intensity + factor < SUNLIGHT_INTENSITY_MAX {
+    world.sunlight.intensity += factor
   }
 }
 
@@ -734,9 +741,6 @@ unsafe fn handle_key_event(window: &glfw::Window, key: glfw::Key, action: glfw::
     (glfw::KeyL, glfw::Repeat)     => { adjust_light_intensity(0.02) },
 
     (glfw::KeyT, glfw::Press)      => { draw_loops = !draw_loops },
-
-    (glfw::KeyDown, glfw::Repeat)  => { vs_rotation_x -= 5.0; },
-    (glfw::KeyUp, glfw::Repeat)    => { vs_rotation_x += 5.0; },
 
     (glfw::KeySpace, glfw::Press) => {
       // Resize should cause the window to "refresh"
