@@ -3,17 +3,18 @@
 out vec4 out_color;
 uniform sampler2D sampler;
 
-uniform struct SimpleDirectionalLight {
-  vec3 color;
-  vec3 direction;
-  float intensity;
-} sunlight;
+
 
 in Vertex {
-  vec4 position;
+  vec3 position;
   vec2 texcoord;
   vec3 normal;
 } vs_out;
+
+in vec3 LightDirection_cameraspace;
+in vec3 Normal_cameraspace;
+in vec3 EyeDirection_cameraspace;
+in vec3 Position_worldspace;
 
 // vec3 face_normal( vec3 position[3], vec3 normal[3])
 // {
@@ -62,11 +63,18 @@ void main() {
   color = mix(color, snow,  smoothstep(s_rock,  res,     z));
 
   // vec4 tex = texture(sampler, vs_out.position.xy * vec2(512));
-  float diffuse_intensity = max(0.0, dot(normalize(vs_out.normal), -sunlight.direction));
+  // float diffuse_intensity = max(0.0, dot(normalize(Normal_cameraspace), -LightDirection_cameraspace.xyz));
 
-  vec4 light = vec4(sunlight.color * (sunlight.intensity + diffuse_intensity), 1.0);
+  // vec4 light = vec4(sunlight.color * (sunlight.intensity + diffuse_intensity), 1.0);
+
+// Normal of the computed fragment, in camera space
+ vec3 n = normalize( Normal_cameraspace );
+ // Direction of the light (from the fragment to the light)
+ vec3 l = normalize( LightDirection_cameraspace );
+
+float light_angle = clamp( dot( n,l ), 0,1 );
 
   // out_color = color * tex;
-  out_color = color * light;
+  out_color = light_angle * color;
 
 }

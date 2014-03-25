@@ -16,6 +16,7 @@ use std::vec;
 use std::io::File;
 use std::io::stdio::flush;
 
+use cgmath::point::Point3;
 use cgmath::matrix::*;
 use cgmath::vector::*;
 use cgmath::angle::*;
@@ -56,17 +57,35 @@ static GS_SRC: &'static str = "test.geom";
 
 static mut draw_loops: bool = false;
 
+static mut camera: Point3<f32>  = Point3 { x: -1.0, y: -1.0, z:  1.0 };
+static mut subject: Point3<f32> = Point3 { x:  0.0, y:  0.0, z:  3.0 };
+static mut direction: Vec3<f32> =   Vec3 { x:  0.0, y:  1.0, z:  0.0 };
+
 static mut world: World = World {
-  rotation:           Vec3 { x: 0.0, y: 0.0, z: 0.0 },
-  scale:              Vec3 { x: 1.0, y: 1.0, z: 1.0 },
-  translation:        Vec3 { x: 0.0, y: 0.0, z: 0.0 },
   projection_matrix:  Mat4 {
     x: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
     y: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
     z: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
     w: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 }
   },
-  sunlight:           DirectionalLight {
+  view_matrix:        Mat4 {
+    x: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+    y: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+    z: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+    w: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 }
+  },
+  model_matrix:      Mat4 {
+    x: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+    y: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+    z: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+    w: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 }
+  },
+
+  rotation:    Vec3 { x: 0.0, y: 0.0, z: 0.0 },
+  scale:       Vec3 { x: 1.0, y: 1.0, z: 1.0 },
+  translation: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
+
+  sunlight: DirectionalLight {
     color:     Vec3 { x:  1.0, y:  1.0, z:  1.0 },
     direction: Vec3 { x:  0.2, y:  0.5, z: -1.0 },
     intensity: 1.0
@@ -74,10 +93,12 @@ static mut world: World = World {
 };
 
 static mut vs_data: VertexShaderData = VertexShaderData {
+  projection_matrix: 0,
+  view_matrix: 0,
+  model_matrix: 0,
   rotation: 0,
   scale: 0,
-  translation: 0,
-  projection_matrix: 0
+  translation: 0
 };
 
 static mut fs_data: FragmentShaderData = FragmentShaderData {
@@ -90,18 +111,24 @@ static mut fs_data: FragmentShaderData = FragmentShaderData {
 // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 struct World {
+  projection_matrix: Mat4<f32>,
+  view_matrix:       Mat4<f32>,
+  model_matrix:      Mat4<f32>,
+
   rotation:     Vec3<f32>,
   scale:        Vec3<f32>,
   translation:  Vec3<f32>,
-  projection_matrix: Mat4<f32>,
+  
   sunlight: DirectionalLight
 }
 
 struct VertexShaderData {
+  projection_matrix: i32,
+  view_matrix: i32,
+  model_matrix: i32,
   rotation: i32,
   scale: i32,
   translation: i32,
-  projection_matrix: i32
 }
 
 struct FragmentShaderData {
@@ -117,20 +144,19 @@ struct DirectionalLight {
   intensity: GLfloat
 }
 
-// Vertex-Normal-Texture
-pub struct Vnt {
-  position: Vec4<GLfloat>,
+struct Vertex {
+  position: Vec3<GLfloat>,
   normal:   Vec3<GLfloat>,
   texture:  Vec2<GLfloat>
 }
 
-impl Vnt {
+impl Vertex {
   pub fn new(
-    vx: f32, vy: f32, vz: f32, vw:  f32,
+    vx: f32, vy: f32, vz: f32,
     nx: f32, ny: f32, nz: f32,
-    u:  f32, v:  f32) -> Vnt {
-    Vnt {
-      position: Vec4::new(vx, vy, vz, vw),
+    u:  f32, v:  f32) -> Vertex {
+    Vertex {
+      position: Vec3::new(vx, vy, vz),
       normal: Vec3::new(nx, ny, nz),
       texture: Vec2::new(u, v)
     }
@@ -171,8 +197,8 @@ fn load_flat_map(height: u32, width: u32, depth: u8) -> ~[u8] {
 
 // Vertex, Normal and Texture initialization -- -- -- -- -- -- -- -- -- -- -- --
 
-fn initialize_vertices(heightmap: ~[f32], width: u32, height: u32) -> ~[Vec4<GLfloat>] {
-  let mut vertices: ~[Vec4<GLfloat>] = ~[];
+fn initialize_vertices(heightmap: ~[f32], width: u32, height: u32) -> ~[Vec3<GLfloat>] {
+  let mut vertices: ~[Vec3<GLfloat>] = ~[];
 
   for x in range(0, width) {
     for y in range(0, height) {
@@ -180,9 +206,8 @@ fn initialize_vertices(heightmap: ~[f32], width: u32, height: u32) -> ~[Vec4<GLf
       let xi = x as f32 / SCALE_X;
       let yi = y as f32 / SCALE_Y;
       let zi = heightmap[x * width + y] as f32 / SCALE_Z;
-      let wi = 0.0;
 
-      let v = Vec4::new(xi, yi, zi, wi);
+      let v = Vec3::new(xi, yi, zi);
       vertices.push(v);
     }
   }
@@ -228,7 +253,7 @@ fn initialize_texcoords(width: u32, height: u32) -> ~[Vec2<GLfloat>] {
   texcoords
 }
 
-fn initialize_normals(v: &[Vec4<GLfloat>], width: u32, height: u32) -> ~[Vec3<GLfloat>] {
+fn initialize_normals(v: &[Vec3<GLfloat>], width: u32, height: u32) -> ~[Vec3<GLfloat>] {
   let mut normals: ~[Vec3<GLfloat>] = ~[];
 
   for row in range(0, width) {
@@ -238,40 +263,40 @@ fn initialize_normals(v: &[Vec4<GLfloat>], width: u32, height: u32) -> ~[Vec3<GL
       let hc = col;
 
       let mut sum = Vec3::new(0f32, 0f32, 0f32);
-      let cur = v[hr+hc].truncate();
+      let cur = v[hr+hc];
 
       if row+1 < width && col+1 < height {
-        sum = sum + (v[hr+0 + hc+1].truncate() - cur).cross(&(v[hr+1 + hc+0].truncate() - cur)).normalize();
+        sum = sum + (v[hr+0 + hc+1] - cur).cross(&(v[hr+1 + hc+0] - cur)).normalize();
       }
 
       if row+1 < width && col > 0 && col+1 < height {
-        sum = sum + (v[hr+1 + hc+0].truncate() - cur).cross(&(v[hr+0 + hc+1].truncate() - cur)).normalize();
+        sum = sum + (v[hr+1 + hc+0] - cur).cross(&(v[hr+0 + hc+1] - cur)).normalize();
       }
 
       if row > 0 && col > 0 && col+1 < height {
-        sum = sum + (v[hr+0 + hc+1].truncate() - cur).cross(&(v[hr+1 + hc+0].truncate() - cur)).normalize();
+        sum = sum + (v[hr+0 + hc+1] - cur).cross(&(v[hr+1 + hc+0] - cur)).normalize();
       }
 
       if row > 0 && col+1 < height && row+1 < width {
-        sum = sum + (v[hr+1 + hc+0].truncate() - cur).cross(&(v[hr+0 + hc+1].truncate() - cur)).normalize();
+        sum = sum + (v[hr+1 + hc+0] - cur).cross(&(v[hr+0 + hc+1] - cur)).normalize();
       }
 
       sum = sum.normalize();
 
-      normals.push(Vec3::new(sum.x / SCALE_X, sum.y / SCALE_Y, sum.z / SCALE_Z));
+      normals.push(Vec3::new(sum.x, sum.y, sum.z));
       //normals.push(Vec3::new(0f32, 1f32, 0f32))
     }
   }
   normals
 }
 
-fn initialize_vnts(vs: ~[Vec4<GLfloat>], ns: ~[Vec3<GLfloat>], ts: ~[Vec2<GLfloat>]) -> ~[Vnt] {
+fn initialize_vnts(vs: ~[Vec3<GLfloat>], ns: ~[Vec3<GLfloat>], ts: ~[Vec2<GLfloat>]) -> ~[Vertex] {
 
   // Make sure there are equal numbers of vertices, normals and texture coordinates
   assert!(vs.len() == ts.len());
   assert!(vs.len() == ns.len());
 
-  let mut vnts: ~[Vnt] = ~[];
+  let mut vnts: ~[Vertex] = ~[];
 
   for i in range(0, vs.len()) {
 
@@ -279,8 +304,8 @@ fn initialize_vnts(vs: ~[Vec4<GLfloat>], ns: ~[Vec3<GLfloat>], ts: ~[Vec2<GLfloa
     let n = ns[i];
     let t = ts[i];
 
-    let vnt = Vnt::new(
-      v.x, v.y, v.z, v.w,
+    let vnt = Vertex::new(
+      v.x, v.y, v.z,
       n.x, n.y, n.z,
       t.x, t.y
     );
@@ -289,7 +314,6 @@ fn initialize_vnts(vs: ~[Vec4<GLfloat>], ns: ~[Vec3<GLfloat>], ts: ~[Vec2<GLfloa
   }
   vnts
 }
-
 
 // -- --
 // source: http://archive.gamedev.net/archive/reference/articles/article2164.html
@@ -482,7 +506,7 @@ fn main() {
 
   if DEBUG { print!("Creating VNTs... "); flush(); }
   let vnts = initialize_vnts(vertices.clone(), normals.clone(), texcoords.clone());
-  if DEBUG { println!("done. ({} VNTs, {} bytes)", vnts.len(), mem::size_of::<Vnt>() * vnts.len()) }
+  if DEBUG { println!("done. ({} VNTs, {} bytes)", vnts.len(), mem::size_of::<Vertex>() * vnts.len()) }
 
   unsafe { initialize_world() }
 
@@ -557,14 +581,14 @@ fn main() {
 
       gl::EnableVertexAttribArray(0);
 
-      let stride = mem::size_of::<Vec2<GLfloat>>() + mem::size_of::<Vec4<GLfloat>>()+ mem::size_of::<Vec3<GLfloat>>();
+      let stride = mem::size_of::<Vec2<GLfloat>>() + mem::size_of::<Vec3<GLfloat>>()+ mem::size_of::<Vec3<GLfloat>>();
 
-      gl::VertexAttribPointer(0, 4, gl::FLOAT, gl::FALSE, stride as GLint, ptr::null());
+      gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, stride as GLint, ptr::null());
 
-      let normals_offset  = cast::transmute(mem::size_of::<Vec4<GLfloat>>());
+      let normals_offset  = cast::transmute(mem::size_of::<Vec3<GLfloat>>());
       gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, stride as GLint, normals_offset);
 
-      let texcoords_offset  = cast::transmute(mem::size_of::<Vec4<GLfloat>>() + mem::size_of::<Vec2<GLfloat>>());
+      let texcoords_offset  = cast::transmute(mem::size_of::<Vec3<GLfloat>>() + mem::size_of::<Vec2<GLfloat>>());
       gl::VertexAttribPointer(2, 3, gl::FLOAT, gl::FALSE, stride as GLint, texcoords_offset);
 
       gl::Enable(gl::DEPTH_TEST);
@@ -642,21 +666,34 @@ unsafe fn initialize_vbo<T>(vec: ~[T], buf_id: &mut GLuint, array_type: GLenum) 
 
 unsafe fn initialize_world() {
   world.projection_matrix = ortho::<f32>(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
+
+  let camera: Point3<f32>  = Point3::new(-1.0f32, -1.0f32, 3.0f32);
+  let subject: Point3<f32> = Point3::new(0.0f32, 0.0f32, 0.0f32);
+  let direction: Vec3<f32> = Vec3::new(0.0f32, 1.0f32, 0.0f32);
+
+  world.view_matrix = Mat4::look_at(&camera, &subject, &direction);
+  world.model_matrix = Mat4::identity();
 }
 
 unsafe fn update_world() {
+  gl::UniformMatrix4fv(vs_data.projection_matrix, 1, gl::FALSE, world.projection_matrix.cr(0,0));
+  gl::UniformMatrix4fv(vs_data.view_matrix, 1, gl::FALSE, world.view_matrix.cr(0,0));
+  gl::UniformMatrix4fv(vs_data.model_matrix, 1, gl::FALSE, world.model_matrix.cr(0,0));
+
   gl::Uniform3f(vs_data.scale, world.scale.x, world.scale.y, world.scale.z);
   gl::Uniform3f(vs_data.translation, world.translation.x, world.translation.y, world.translation.z);
-  gl::UniformMatrix4fv(vs_data.projection_matrix, 1, gl::FALSE, world.projection_matrix.cr(0,0));
   gl::Uniform3f(fs_data.sunlight_color, world.sunlight.color.x, world.sunlight.color.y, world.sunlight.color.z);
   gl::Uniform3f(fs_data.sunlight_direction, world.sunlight.direction.x, world.sunlight.direction.y, world.sunlight.direction.z);
   gl::Uniform1f(fs_data.sunlight_intensity, world.sunlight.intensity);
 }
 
 unsafe fn initialize_shader_data(shader_program: GLuint) {
+  vs_data.model_matrix       = "M".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+  vs_data.view_matrix        = "V".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+  vs_data.projection_matrix  = "P".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+
   vs_data.scale              = "scaling".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
   vs_data.translation        = "translation".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
-  vs_data.projection_matrix  = "projection_matrix".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
   fs_data.sunlight_color     = "sunlight.color".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
   fs_data.sunlight_direction = "sunlight.direction".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
   fs_data.sunlight_intensity = "sunlight.intensity".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
@@ -671,8 +708,11 @@ unsafe fn initialize_shader_data(shader_program: GLuint) {
 // Event handling -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 unsafe fn move_world(x_factor: f32, y_factor: f32) {
-  world.translation.x += x_factor;
-  world.translation.y += y_factor;
+
+  camera.x += x_factor;
+  camera.y += y_factor;
+
+  world.view_matrix = Mat4::look_at(&camera, &subject, &direction);
 }
 
 unsafe fn scale_world(factor: f32) {
