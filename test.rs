@@ -118,7 +118,7 @@ struct World {
   rotation:     Vec3<f32>,
   scale:        Vec3<f32>,
   translation:  Vec3<f32>,
-  
+
   sunlight: DirectionalLight
 }
 
@@ -667,11 +667,12 @@ unsafe fn initialize_vbo<T>(vec: ~[T], buf_id: &mut GLuint, array_type: GLenum) 
 unsafe fn initialize_world() {
   world.projection_matrix = ortho::<f32>(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
 
-  let camera: Point3<f32>  = Point3::new(-1.0f32, -1.0f32, 3.0f32);
-  let subject: Point3<f32> = Point3::new(0.0f32, 0.0f32, 0.0f32);
-  let direction: Vec3<f32> = Vec3::new(0.0f32, 1.0f32, 0.0f32);
-
-  world.view_matrix = Mat4::look_at(&camera, &subject, &direction);
+  // let camera: Point3<f32>  = Point3::new(0.0f32, 0.0f32, 3.0f32);
+  // let subject: Point3<f32> = Point3::new(0.0f32, 0.0f32, 0.0f32);
+  // let direction: Vec3<f32> = Vec3::new(0.0f32, 1.0f32, 0.0f32);
+  //
+  // world.view_matrix = Mat4::look_at(&camera, &subject, &direction);
+  world.view_matrix = Mat4::identity();
   world.model_matrix = Mat4::identity();
 }
 
@@ -707,12 +708,21 @@ unsafe fn initialize_shader_data(shader_program: GLuint) {
 
 // Event handling -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-unsafe fn move_world(x_factor: f32, y_factor: f32) {
+unsafe fn rotate_world(x_factor: f32, y_factor: f32, z_factor: f32) {
 
-  camera.x += x_factor;
-  camera.y += y_factor;
+  world.rotation.x += x_factor;
+  world.rotation.y += y_factor;
+  world.rotation.z += z_factor;
 
-  world.view_matrix = Mat4::look_at(&camera, &subject, &direction);
+  let x_axis: Vec3<f32> = Vec3::new(1.0f32, 0.0f32, 0.0f32);
+  let y_axis: Vec3<f32> = Vec3::new(0.0f32, 1.0f32, 0.0f32);
+  let z_axis: Vec3<f32> = Vec3::new(0.0f32, 0.0f32, 1.0f32);
+
+  let rot: Mat3<f32> = Mat3::from_axis_angle(&x_axis, rad(world.rotation.x))
+                     + Mat3::from_axis_angle(&y_axis, rad(world.rotation.y))
+                     + Mat3::from_axis_angle(&z_axis, rad(world.rotation.z));
+
+  world.view_matrix = rot.to_mat4();
 }
 
 unsafe fn scale_world(factor: f32) {
@@ -761,14 +771,23 @@ fn handle_window_event(window: &glfw::Window, (time, event): (f64, glfw::WindowE
 unsafe fn handle_key_event(window: &glfw::Window, key: glfw::Key, action: glfw::Action) {
   match (key, action) {
     (glfw::KeyEscape, glfw::Press) => window.set_should_close(true),
-    (glfw::KeyW, glfw::Repeat)     => { move_world( 0.00, -SCROLL_SPEED) },
-    (glfw::KeyW, glfw::Press)      => { move_world( 0.00, -SCROLL_SPEED) },
-    (glfw::KeyS, glfw::Repeat)     => { move_world( 0.00,  SCROLL_SPEED) },
-    (glfw::KeyS, glfw::Press)      => { move_world( 0.00,  SCROLL_SPEED) },
-    (glfw::KeyA, glfw::Repeat)     => { move_world( SCROLL_SPEED,  0.00) },
-    (glfw::KeyA, glfw::Press)      => { move_world( SCROLL_SPEED,  0.00) },
-    (glfw::KeyD, glfw::Repeat)     => { move_world(-SCROLL_SPEED,  0.00) },
-    (glfw::KeyD, glfw::Press)      => { move_world(-SCROLL_SPEED,  0.00) },
+    // (glfw::KeyW, glfw::Repeat)     => { move_world( 0.00, -SCROLL_SPEED) },
+    // (glfw::KeyW, glfw::Press)      => { move_world( 0.00, -SCROLL_SPEED) },
+    // (glfw::KeyS, glfw::Repeat)     => { move_world( 0.00,  SCROLL_SPEED) },
+    // (glfw::KeyS, glfw::Press)      => { move_world( 0.00,  SCROLL_SPEED) },
+    // (glfw::KeyA, glfw::Repeat)     => { move_world( SCROLL_SPEED,  0.00) },
+    // (glfw::KeyA, glfw::Press)      => { move_world( SCROLL_SPEED,  0.00) },
+    // (glfw::KeyD, glfw::Repeat)     => { move_world(-SCROLL_SPEED,  0.00) },
+    // (glfw::KeyD, glfw::Press)      => { move_world(-SCROLL_SPEED,  0.00) },
+
+    (glfw::KeyUp, glfw::Repeat)     => { rotate_world( 0.00, 0.00, -SCROLL_SPEED) },
+    (glfw::KeyUp, glfw::Press)      => { rotate_world( 0.00, 0.00, -SCROLL_SPEED) },
+    (glfw::KeyDown, glfw::Repeat)   => { rotate_world( 0.00, 0.00,  SCROLL_SPEED) },
+    (glfw::KeyDown, glfw::Press)    => { rotate_world( 0.00, 0.00,  SCROLL_SPEED) },
+    (glfw::KeyLeft, glfw::Repeat)   => { rotate_world( 0.00, -SCROLL_SPEED, 0.00) },
+    (glfw::KeyLeft, glfw::Press)    => { rotate_world( 0.00, -SCROLL_SPEED, 0.00) },
+    (glfw::KeyRight, glfw::Repeat)  => { rotate_world( 0.00,  SCROLL_SPEED, 0.00) },
+    (glfw::KeyRight, glfw::Press)   => { rotate_world( 0.00,  SCROLL_SPEED, 0.00) },
 
     (glfw::KeyR, glfw::Press)      => { scale_world(0.5) },
     (glfw::KeyR, glfw::Repeat)     => { scale_world(0.5) },
