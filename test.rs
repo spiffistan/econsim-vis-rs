@@ -34,19 +34,13 @@ static DEBUG: bool = true;
 
 static PNG_SRC: &'static str = "heightmap2.png";
 static TEX_SRC: &'static str = "grass.png";
-// static MAP_SRC: &'static str = "elevation.data";
-// static MAP_W: uint = 2048;
-// static MAP_H: uint = 2048;
-// static MAP_SIZE: uint = MAP_W * MAP_H;
-
-static SCALE:   f32 = 512.0;
-static SCALE_X: f32 = SCALE;
-static SCALE_Y: f32 = SCALE;
-static SCALE_Z: f32 = 512.0;
 
 static SCROLL_SPEED: f32 = 0.1;
+
 static SCALE_MIN: f32 = 0.0;
 static SCALE_MAX: f32 = 25.0;
+static SCALE_FACTOR: f32 = 0.001;
+
 static SUNLIGHT_INTENSITY_MIN: f32 = 0.5;
 static SUNLIGHT_INTENSITY_MAX: f32 = 1.5;
 
@@ -172,6 +166,11 @@ enum Compass {
   East
 }
 
+enum Zoom {
+  In,
+  Out
+}
+
 
 #[start]
 fn start(argc: int, argv: **u8) -> int {
@@ -212,9 +211,9 @@ fn initialize_vertices(heightmap: ~[f32], width: u32, height: u32) -> ~[Vec3<GLf
   for x in range(0, width) {
     for y in range(0, height) {
 
-      let xi = x as f32 / SCALE_X;
-      let yi = y as f32 / SCALE_Y;
-      let zi = heightmap[x * width + y] as f32 / SCALE_Z;
+      let xi = x as f32;
+      let yi = y as f32;
+      let zi = heightmap[x * width + y] as f32;
 
       let v = Vec3::new(xi, yi, zi);
       vertices.push(v);
@@ -293,7 +292,6 @@ fn initialize_normals(v: &[Vec3<GLfloat>], width: u32, height: u32) -> ~[Vec3<GL
       sum = sum.normalize();
 
       normals.push(Vec3::new(sum.x, sum.y, sum.z));
-      //normals.push(Vec3::new(0f32, 1f32, 0f32))
     }
   }
   normals
@@ -324,9 +322,6 @@ fn initialize_vnts(vs: ~[Vec3<GLfloat>], ns: ~[Vec3<GLfloat>], ts: ~[Vec2<GLfloa
   vnts
 }
 
-// -- --
-// source: http://archive.gamedev.net/archive/reference/articles/article2164.html
-
 fn box_filter_heightmap(heightmap: ~[u8], width: u32, height: u32, smoothen_edges: bool) -> ~[GLfloat] {
 
   let mut filtered_map: ~[GLfloat] = ~[];
@@ -334,7 +329,7 @@ fn box_filter_heightmap(heightmap: ~[u8], width: u32, height: u32, smoothen_edge
   let x = 0;
   let z = 0;
 
-  let z_stop = if smoothen_edges {width} else {width-1};
+  let z_stop = if smoothen_edges {width}  else {width-1};
   let x_stop = if smoothen_edges {height} else {height-1};
 
   let bounds = width * height;
@@ -422,7 +417,6 @@ fn box_filter_heightmap(heightmap: ~[u8], width: u32, height: u32, smoothen_edge
   }
   filtered_map
 }
-
 
 // Shader compilation and initialization  -- -- -- -- -- -- -- -- -- -- -- -- --
 
@@ -630,7 +624,7 @@ fn main() {
       }
 
       // Clear the screen to black
-      gl::ClearColor(0.3, 0.3, 0.3, 1.0);
+      gl::ClearColor(34.0/256.0, 37.0/256.0, 39.0/256.0, 1.0);
       gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
       unsafe {
@@ -675,13 +669,13 @@ unsafe fn initialize_vbo<T>(vec: ~[T], buf_id: &mut GLuint, array_type: GLenum) 
 
 unsafe fn initialize_world() {
 
-  let xr = deg(-15.0f32).to_rad().s;
+  let xr = deg(15.0f32).to_rad().s;
   let yr = deg(0.0f32).to_rad().s;;
   let zr = deg(-15.0f32).to_rad().s;
 
   world.rotation = Quat::new(1.0f32, xr, yr, zr);
   world.translation = Vec3::new(-1.0f32, -1.0f32, 0.0f32);
-  world.scale = 1.0f32;
+  world.scale = 0.001f32;
 
   world.projection_matrix = Mat4::identity();
   world.view_matrix = Mat4::identity();
@@ -724,6 +718,7 @@ unsafe fn update_model_matrix() {
 }
 
 // Rotation  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 unsafe fn rotate_world(x: f32, y: f32, z: f32) {
 
   world.rotation.v.x += x;
@@ -760,8 +755,8 @@ unsafe fn translate_world(x: f32, y: f32, z: f32) {
 
 unsafe fn move(dir: Compass) {
   match dir {
-    North => translate_world(0f32,  SCROLL_SPEED, 0f32),
-    South => translate_world(0f32, -SCROLL_SPEED, 0f32),
+    North => translate_world(0f32, -SCROLL_SPEED, 0f32),
+    South => translate_world(0f32,  SCROLL_SPEED, 0f32),
     West  => translate_world( SCROLL_SPEED, 0f32, 0f32),
     East  => translate_world(-SCROLL_SPEED, 0f32, 0f32)
   }
@@ -775,6 +770,13 @@ unsafe fn scale_world(factor: f32) {
   }
 
   update_model_matrix();
+}
+
+unsafe fn zoom(dir: Zoom) {
+  match dir {
+    In  => scale_world( SCALE_FACTOR),
+    Out => scale_world(-SCALE_FACTOR)
+  }
 }
 
 unsafe fn adjust_light_intensity(factor: f32) {
@@ -832,10 +834,8 @@ unsafe fn handle_key_event(window: &glfw::Window, key: glfw::Key, action: glfw::
     (glfw::KeyLeft, _)   => { rotate_y(true) },
     (glfw::KeyRight, _)  => { rotate_y(false) },
 
-    (glfw::KeyR, glfw::Press)      => { scale_world(0.5) },
-    (glfw::KeyR, glfw::Repeat)     => { scale_world(0.5) },
-    (glfw::KeyF, glfw::Press)      => { scale_world(-0.5) },
-    (glfw::KeyF, glfw::Repeat)     => { scale_world(-0.5) },
+    (glfw::KeyR, glfw::Press)      => { zoom(In) },
+    (glfw::KeyF, glfw::Press)      => { zoom(Out) },
 
     (glfw::KeyK, glfw::Press)      => { adjust_light_intensity(-0.02) },
     (glfw::KeyL, glfw::Press)      => { adjust_light_intensity(0.02) },

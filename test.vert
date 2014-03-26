@@ -8,9 +8,6 @@ uniform mat4 M;
 uniform mat4 V;
 uniform mat4 P;
 
-uniform vec3 scaling;
-uniform vec3 translation;
-
 uniform struct SimpleDirectionalLight {
   vec3 color;
   vec3 direction;
@@ -28,25 +25,6 @@ out vec3 Normal_cameraspace;
 out vec3 EyeDirection_cameraspace;
 out vec3 Position_worldspace;
 
-mat4 scale(float x, float y, float z) {
-
-    return mat4(
-        vec4(x,   0.0, 0.0, 0.0),
-        vec4(0.0, y,   0.0, 0.0),
-        vec4(0.0, 0.0, z,   0.0),
-        vec4(0.0, 0.0, 0.0, 1.0)
-    );
-}
-
-mat4 translate(float x, float y, float z) {
-    return mat4(
-        vec4(1.0, 0.0, 0.0, 0.0),
-        vec4(0.0, 1.0, 0.0, 0.0),
-        vec4(0.0, 0.0, 1.0, 0.0),
-        vec4(x,   y,   z,   1.0)
-    );
-}
-
 mat4 MVP(void) {
   return P * V * M;
 }
@@ -57,14 +35,7 @@ void main() {
   vs_out.position = position;
   vs_out.texcoord = texcoord;
 
-  // mat4 projected = MVP();
-    // * translate(translation.x, translation.y, translation.z)
-    // * scale(scaling.x, scaling.y, 1.0);
-    // * projection_matrix
-    // * rotate(vec3(0,0,1), radians(15))
-    // * rotate(vec3(1,0,0), radians(-15))
-
-  gl_Position = MVP() * vec4(position.xyz, 1.0);
+  gl_Position = MVP() * vec4(position.xy, position.z * -1.0, 1.0);
 
   //
   // // Position of the vertex, in worldspace : M * position

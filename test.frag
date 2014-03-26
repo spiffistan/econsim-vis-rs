@@ -3,8 +3,6 @@
 out vec4 out_color;
 uniform sampler2D sampler;
 
-
-
 in Vertex {
   vec3 position;
   vec2 texcoord;
@@ -36,7 +34,7 @@ void main() {
 
   vec4 color;
   float z = vs_out.position.z;
-  float res = 1;
+  float res = 256;
 
   vec4 water = rgba2vec4(3,22,52,1);
   vec4 shore = rgba2vec4(3,54,73,1);
