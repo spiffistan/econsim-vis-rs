@@ -16,6 +16,8 @@ use std::vec;
 use std::io::File;
 use std::io::stdio::flush;
 
+use cgmath::quaternion::Quat;
+use cgmath::transform::Transform3D;
 use cgmath::point::Point3;
 use cgmath::matrix::*;
 use cgmath::vector::*;
@@ -40,7 +42,7 @@ static TEX_SRC: &'static str = "grass.png";
 static SCALE:   f32 = 512.0;
 static SCALE_X: f32 = SCALE;
 static SCALE_Y: f32 = SCALE;
-static SCALE_Z: f32 = 256.0;
+static SCALE_Z: f32 = 512.0;
 
 static SCROLL_SPEED: f32 = 0.1;
 static SCALE_MIN: f32 = 0.0;
@@ -57,8 +59,8 @@ static GS_SRC: &'static str = "test.geom";
 
 static mut draw_loops: bool = false;
 
-static mut camera: Point3<f32>  = Point3 { x: -1.0, y: -1.0, z:  1.0 };
-static mut subject: Point3<f32> = Point3 { x:  0.0, y:  0.0, z:  3.0 };
+static mut camera: Point3<f32>  = Point3 { x: -1.0, y: -1.0, z:  2.0 };
+static mut subject: Point3<f32> = Point3 { x:  0.0, y:  0.0, z:  0.0 };
 static mut direction: Vec3<f32> =   Vec3 { x:  0.0, y:  1.0, z:  0.0 };
 
 static mut world: World = World {
@@ -81,8 +83,8 @@ static mut world: World = World {
     w: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 }
   },
 
-  rotation:    Vec3 { x: 0.0, y: 0.0, z: 0.0 },
-  scale:       Vec3 { x: 1.0, y: 1.0, z: 1.0 },
+  rotation:    Quat { s: 0.0, v: Vec3 { x: 0.0, y: 0.0, z: 0.0 } },
+  scale:       1.0f32,
   translation: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
 
   sunlight: DirectionalLight {
@@ -115,8 +117,8 @@ struct World {
   view_matrix:       Mat4<f32>,
   model_matrix:      Mat4<f32>,
 
-  rotation:     Vec3<f32>,
-  scale:        Vec3<f32>,
+  rotation:     Quat<f32>,
+  scale:        f32,
   translation:  Vec3<f32>,
 
   sunlight: DirectionalLight
@@ -161,6 +163,13 @@ impl Vertex {
       texture: Vec2::new(u, v)
     }
   }
+}
+
+enum Compass {
+  North,
+  South,
+  West,
+  East
 }
 
 
@@ -617,7 +626,7 @@ fn main() {
       glfw::poll_events();
       for event in window.flush_events() {
         handle_window_event(&window, event);
-        unsafe { update_world() }
+        unsafe { update_uniforms() }
       }
 
       // Clear the screen to black
@@ -665,24 +674,26 @@ unsafe fn initialize_vbo<T>(vec: ~[T], buf_id: &mut GLuint, array_type: GLenum) 
 }
 
 unsafe fn initialize_world() {
-  world.projection_matrix = ortho::<f32>(0.0, 1.0, 0.0, 1.0, -1.0, 1.0);
 
-  // let camera: Point3<f32>  = Point3::new(0.0f32, 0.0f32, 3.0f32);
-  // let subject: Point3<f32> = Point3::new(0.0f32, 0.0f32, 0.0f32);
-  // let direction: Vec3<f32> = Vec3::new(0.0f32, 1.0f32, 0.0f32);
-  //
-  // world.view_matrix = Mat4::look_at(&camera, &subject, &direction);
+  let xr = deg(-15.0f32).to_rad().s;
+  let yr = deg(0.0f32).to_rad().s;;
+  let zr = deg(-15.0f32).to_rad().s;
+
+  world.rotation = Quat::new(1.0f32, xr, yr, zr);
+  world.translation = Vec3::new(-1.0f32, -1.0f32, 0.0f32);
+  world.scale = 1.0f32;
+
+  world.projection_matrix = Mat4::identity();
   world.view_matrix = Mat4::identity();
-  world.model_matrix = Mat4::identity();
+  world.model_matrix = Transform3D::new(world.scale, world.rotation, world.translation).to_mat4();
+
 }
 
-unsafe fn update_world() {
+unsafe fn update_uniforms() {
   gl::UniformMatrix4fv(vs_data.projection_matrix, 1, gl::FALSE, world.projection_matrix.cr(0,0));
   gl::UniformMatrix4fv(vs_data.view_matrix, 1, gl::FALSE, world.view_matrix.cr(0,0));
   gl::UniformMatrix4fv(vs_data.model_matrix, 1, gl::FALSE, world.model_matrix.cr(0,0));
 
-  gl::Uniform3f(vs_data.scale, world.scale.x, world.scale.y, world.scale.z);
-  gl::Uniform3f(vs_data.translation, world.translation.x, world.translation.y, world.translation.z);
   gl::Uniform3f(fs_data.sunlight_color, world.sunlight.color.x, world.sunlight.color.y, world.sunlight.color.z);
   gl::Uniform3f(fs_data.sunlight_direction, world.sunlight.direction.x, world.sunlight.direction.y, world.sunlight.direction.z);
   gl::Uniform1f(fs_data.sunlight_intensity, world.sunlight.intensity);
@@ -708,31 +719,62 @@ unsafe fn initialize_shader_data(shader_program: GLuint) {
 
 // Event handling -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-unsafe fn rotate_world(x_factor: f32, y_factor: f32, z_factor: f32) {
-
-  world.rotation.x += x_factor;
-  world.rotation.y += y_factor;
-  world.rotation.z += z_factor;
-
-  let x_axis: Vec3<f32> = Vec3::new(1.0f32, 0.0f32, 0.0f32);
-  let y_axis: Vec3<f32> = Vec3::new(0.0f32, 1.0f32, 0.0f32);
-  let z_axis: Vec3<f32> = Vec3::new(0.0f32, 0.0f32, 1.0f32);
-
-  let rot: Mat3<f32> = Mat3::from_axis_angle(&x_axis, rad(world.rotation.x))
-                     + Mat3::from_axis_angle(&y_axis, rad(world.rotation.y))
-                     + Mat3::from_axis_angle(&z_axis, rad(world.rotation.z));
-
-  world.view_matrix = rot.to_mat4();
+unsafe fn update_model_matrix() {
+  world.model_matrix = Transform3D::new(world.scale, world.rotation, world.translation).to_mat4();
 }
 
-unsafe fn scale_world(factor: f32) {
-  if world.scale.x + factor > SCALE_MIN
-  && world.scale.x + factor < SCALE_MAX
-  && world.scale.y + factor > SCALE_MIN
-  && world.scale.y + factor < SCALE_MAX {
-    world.scale.x += factor;
-    world.scale.y += factor;
+// Rotation  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+unsafe fn rotate_world(x: f32, y: f32, z: f32) {
+
+  world.rotation.v.x += x;
+  world.rotation.v.y += y;
+  world.rotation.v.z += z;
+
+  update_model_matrix();
+}
+
+unsafe fn rotate_x(cw: bool) {
+  let sign = if cw {1.0} else {-1.0};
+  rotate_world(SCROLL_SPEED * sign, 0.0, 0.0);
+}
+
+unsafe fn rotate_y(cw: bool) {
+  let sign = if cw {1.0} else {-1.0};
+  rotate_world(0.0, SCROLL_SPEED * sign, 0.0);
+}
+
+unsafe fn rotate_z(cw: bool) {
+  let sign = if cw {1.0} else {-1.0};
+  rotate_world(0.0, 0.0, SCROLL_SPEED * sign);
+}
+
+// Translation - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+unsafe fn translate_world(x: f32, y: f32, z: f32) {
+  world.translation.x += x;
+  world.translation.y += y;
+  world.translation.z += z;
+
+  update_model_matrix();
+}
+
+unsafe fn move(dir: Compass) {
+  match dir {
+    North => translate_world(0f32,  SCROLL_SPEED, 0f32),
+    South => translate_world(0f32, -SCROLL_SPEED, 0f32),
+    West  => translate_world( SCROLL_SPEED, 0f32, 0f32),
+    East  => translate_world(-SCROLL_SPEED, 0f32, 0f32)
   }
+}
+
+// Scaling - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+unsafe fn scale_world(factor: f32) {
+  if world.scale + factor > SCALE_MIN && world.scale + factor < SCALE_MAX {
+    world.scale += factor;
+  }
+
+  update_model_matrix();
 }
 
 unsafe fn adjust_light_intensity(factor: f32) {
@@ -762,32 +804,33 @@ fn handle_window_event(window: &glfw::Window, (time, event): (f64, glfw::WindowE
       glfw::ScrollEvent(x, y)             => window.set_title(format!("Time: {}, Scroll offset: ({}, {})", time, x, y)),
       glfw::KeyEvent(key, scancode, action, mods) => {
         println!("Time: {}, Key: {}, ScanCode: {}, Action: {}, Modifiers: [{}]", time, key, scancode, action, mods);
-        handle_key_event(window, key, action);
+        handle_key_event(window, key, action, mods);
       }
     }
   }
 }
 
-unsafe fn handle_key_event(window: &glfw::Window, key: glfw::Key, action: glfw::Action) {
+unsafe fn handle_key_event(window: &glfw::Window, key: glfw::Key, action: glfw::Action, mods: glfw::Modifiers) {
+
   match (key, action) {
     (glfw::KeyEscape, glfw::Press) => window.set_should_close(true),
-    // (glfw::KeyW, glfw::Repeat)     => { move_world( 0.00, -SCROLL_SPEED) },
-    // (glfw::KeyW, glfw::Press)      => { move_world( 0.00, -SCROLL_SPEED) },
-    // (glfw::KeyS, glfw::Repeat)     => { move_world( 0.00,  SCROLL_SPEED) },
-    // (glfw::KeyS, glfw::Press)      => { move_world( 0.00,  SCROLL_SPEED) },
-    // (glfw::KeyA, glfw::Repeat)     => { move_world( SCROLL_SPEED,  0.00) },
-    // (glfw::KeyA, glfw::Press)      => { move_world( SCROLL_SPEED,  0.00) },
-    // (glfw::KeyD, glfw::Repeat)     => { move_world(-SCROLL_SPEED,  0.00) },
-    // (glfw::KeyD, glfw::Press)      => { move_world(-SCROLL_SPEED,  0.00) },
+    (glfw::KeyW, _) => { move(North) },
+    (glfw::KeyS, _) => { move(South) },
+    (glfw::KeyA, _) => { move(West)  },
+    (glfw::KeyD, _) => { move(East)  },
 
-    (glfw::KeyUp, glfw::Repeat)     => { rotate_world( 0.00, 0.00, -SCROLL_SPEED) },
-    (glfw::KeyUp, glfw::Press)      => { rotate_world( 0.00, 0.00, -SCROLL_SPEED) },
-    (glfw::KeyDown, glfw::Repeat)   => { rotate_world( 0.00, 0.00,  SCROLL_SPEED) },
-    (glfw::KeyDown, glfw::Press)    => { rotate_world( 0.00, 0.00,  SCROLL_SPEED) },
-    (glfw::KeyLeft, glfw::Repeat)   => { rotate_world( 0.00, -SCROLL_SPEED, 0.00) },
-    (glfw::KeyLeft, glfw::Press)    => { rotate_world( 0.00, -SCROLL_SPEED, 0.00) },
-    (glfw::KeyRight, glfw::Repeat)  => { rotate_world( 0.00,  SCROLL_SPEED, 0.00) },
-    (glfw::KeyRight, glfw::Press)   => { rotate_world( 0.00,  SCROLL_SPEED, 0.00) },
+    // Rotate X or Z
+    (glfw::KeyUp, _)  => {
+      if mods.contains(glfw::Shift) { rotate_z(true) } else { rotate_x(true) }
+    }
+
+    (glfw::KeyDown, _)  => {
+      if mods.contains(glfw::Shift) { rotate_z(false) } else { rotate_x(false) }
+    }
+
+    // Rotate Y
+    (glfw::KeyLeft, _)   => { rotate_y(true) },
+    (glfw::KeyRight, _)  => { rotate_y(false) },
 
     (glfw::KeyR, glfw::Press)      => { scale_world(0.5) },
     (glfw::KeyR, glfw::Repeat)     => { scale_world(0.5) },

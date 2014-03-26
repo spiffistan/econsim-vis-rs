@@ -67,14 +67,14 @@ void main() {
 
   // vec4 light = vec4(sunlight.color * (sunlight.intensity + diffuse_intensity), 1.0);
 
-// Normal of the computed fragment, in camera space
- vec3 n = normalize( Normal_cameraspace );
- // Direction of the light (from the fragment to the light)
- vec3 l = normalize( LightDirection_cameraspace );
-
-float light_angle = clamp( dot( n,l ), 0,1 );
+// // Normal of the computed fragment, in camera space
+//  vec3 n = normalize( Normal_cameraspace );
+//  // Direction of the light (from the fragment to the light)
+//  vec3 l = normalize( LightDirection_cameraspace );
+//
+// float light_angle = clamp( dot( n,l ), 0,1 );
 
   // out_color = color * tex;
-  out_color = light_angle * color;
+  out_color = color;
 
 }
