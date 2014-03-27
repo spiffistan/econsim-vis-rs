@@ -35,11 +35,12 @@ static DEBUG: bool = true;
 static PNG_SRC: &'static str = "heightmap2.png";
 static TEX_SRC: &'static str = "grass.png";
 
-static SCROLL_SPEED: f32 = 0.1;
+static CAMERA_TRANSLATE_BY: f32 = 0.05;
+static CAMERA_SCALE_BY: f32 = 0.05;
+static CAMERA_ROTATE_BY: f32 = 0.05;
 
 static SCALE_MIN: f32 = 0.0;
 static SCALE_MAX: f32 = 25.0;
-static SCALE_FACTOR: f32 = 0.001;
 
 static SUNLIGHT_INTENSITY_MIN: f32 = 0.5;
 static SUNLIGHT_INTENSITY_MAX: f32 = 1.5;
@@ -53,23 +54,7 @@ static GS_SRC: &'static str = "test.geom";
 
 static mut draw_loops: bool = false;
 
-static mut camera: Point3<f32>  = Point3 { x: -1.0, y: -1.0, z:  2.0 };
-static mut subject: Point3<f32> = Point3 { x:  0.0, y:  0.0, z:  0.0 };
-static mut direction: Vec3<f32> =   Vec3 { x:  0.0, y:  1.0, z:  0.0 };
-
 static mut world: World = World {
-  projection_matrix:  Mat4 {
-    x: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
-    y: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
-    z: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
-    w: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 }
-  },
-  view_matrix:        Mat4 {
-    x: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
-    y: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
-    z: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
-    w: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 }
-  },
   model_matrix:      Mat4 {
     x: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
     y: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
@@ -85,6 +70,28 @@ static mut world: World = World {
     color:     Vec3 { x:  1.0, y:  1.0, z:  1.0 },
     direction: Vec3 { x:  0.2, y:  0.5, z: -1.0 },
     intensity: 1.0
+  }
+};
+
+static mut camera: Camera = Camera {
+  view_matrix:        Mat4 {
+    x: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+    y: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+    z: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+    w: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 }
+  },
+
+  rotation:    Quat { s: 0.0, v: Vec3 { x: 0.0, y: 0.0, z: 0.0 } },
+  scale:       1.0f32,
+  translation: Vec3 { x: 0.0, y: 0.0, z: 0.0 }
+};
+
+static mut screen: Screen = Screen {
+  projection_matrix:  Mat4 {
+    x: Vec4 { x: 3.0/4.0, y: 0.0, z: 0.0, w: 0.0 },
+    y: Vec4 { x:     0.0, y: 1.0, z: 0.0, w: 0.0 },
+    z: Vec4 { x:     0.0, y: 0.0, z: 0.5, w: 0.0 },
+    w: Vec4 { x:     0.0, y: 0.0, z: 0.0, w: 1.0 }
   }
 };
 
@@ -107,15 +114,25 @@ static mut fs_data: FragmentShaderData = FragmentShaderData {
 // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
 struct World {
-  projection_matrix: Mat4<f32>,
-  view_matrix:       Mat4<f32>,
-  model_matrix:      Mat4<f32>,
+  model_matrix:  Mat4<f32>,
+
+  rotation:      Quat<f32>,
+  scale:         f32,
+  translation:   Vec3<f32>,
+
+  sunlight: DirectionalLight
+}
+
+struct Camera {
+  view_matrix:  Mat4<f32>,
 
   rotation:     Quat<f32>,
   scale:        f32,
-  translation:  Vec3<f32>,
+  translation:  Vec3<f32>
+}
 
-  sunlight: DirectionalLight
+struct Screen {
+  projection_matrix: Mat4<f32>,
 }
 
 struct VertexShaderData {
@@ -511,7 +528,11 @@ fn main() {
   let vnts = initialize_vnts(vertices.clone(), normals.clone(), texcoords.clone());
   if DEBUG { println!("done. ({} VNTs, {} bytes)", vnts.len(), mem::size_of::<Vertex>() * vnts.len()) }
 
-  unsafe { initialize_world() }
+  unsafe {
+    initialize_world();
+    initialize_camera();
+    initialize_screen();
+  }
 
   // Start OpenGL -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
@@ -673,19 +694,30 @@ unsafe fn initialize_world() {
   let yr = deg(0.0f32).to_rad().s;;
   let zr = deg(-15.0f32).to_rad().s;
 
-  world.rotation = Quat::new(1.0f32, xr, yr, zr);
-  world.translation = Vec3::new(-1.0f32, -1.0f32, 0.0f32);
-  world.scale = 0.001f32;
+  world.rotation = Quat::new(1.0f32, xr, yr, zr); // Rotate the world
+  world.translation = Vec3::new(-1.0f32, -1.0f32, 0.0f32); // Center the world
+  world.scale = 0.001f32; // Zoom far out
 
-  world.projection_matrix = Mat4::identity();
-  world.view_matrix = Mat4::identity();
   world.model_matrix = Transform3D::new(world.scale, world.rotation, world.translation).to_mat4();
+}
 
+unsafe fn initialize_camera() {
+
+  camera.rotation = Quat::identity(); // No rotation
+  camera.translation = Vec3::zero(); // No translation
+  camera.scale = 1f32; // No zooming
+
+  // camera.view_matrix = Transform3D::new(camera.scale, camera.rotation, camera.translation).to_mat4();
+  camera.view_matrix = Mat4::identity();
+}
+
+unsafe fn initialize_screen() {
+  screen.projection_matrix = Mat4::identity();
 }
 
 unsafe fn update_uniforms() {
-  gl::UniformMatrix4fv(vs_data.projection_matrix, 1, gl::FALSE, world.projection_matrix.cr(0,0));
-  gl::UniformMatrix4fv(vs_data.view_matrix, 1, gl::FALSE, world.view_matrix.cr(0,0));
+  gl::UniformMatrix4fv(vs_data.projection_matrix, 1, gl::FALSE, screen.projection_matrix.cr(0,0));
+  gl::UniformMatrix4fv(vs_data.view_matrix, 1, gl::FALSE, camera.view_matrix.cr(0,0));
   gl::UniformMatrix4fv(vs_data.model_matrix, 1, gl::FALSE, world.model_matrix.cr(0,0));
 
   gl::Uniform3f(fs_data.sunlight_color, world.sunlight.color.x, world.sunlight.color.y, world.sunlight.color.z);
@@ -717,65 +749,73 @@ unsafe fn update_model_matrix() {
   world.model_matrix = Transform3D::new(world.scale, world.rotation, world.translation).to_mat4();
 }
 
+unsafe fn update_view_matrix() {
+  camera.view_matrix = Transform3D::new(camera.scale, camera.rotation, camera.translation).to_mat4();
+}
+
+unsafe fn update_projection_matrix() {
+  // screen.projection_matrix = Mat4::identity();
+}
+
 // Rotation  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-unsafe fn rotate_world(x: f32, y: f32, z: f32) {
+unsafe fn rotate_camera(x: f32, y: f32, z: f32) {
 
-  world.rotation.v.x += x;
-  world.rotation.v.y += y;
-  world.rotation.v.z += z;
+  camera.rotation.v.x += x;
+  camera.rotation.v.y += y;
+  camera.rotation.v.z += z;
 
-  update_model_matrix();
+  update_view_matrix();
 }
 
 unsafe fn rotate_x(cw: bool) {
   let sign = if cw {1.0} else {-1.0};
-  rotate_world(SCROLL_SPEED * sign, 0.0, 0.0);
+  rotate_camera(CAMERA_ROTATE_BY * sign, 0.0, 0.0);
 }
 
 unsafe fn rotate_y(cw: bool) {
   let sign = if cw {1.0} else {-1.0};
-  rotate_world(0.0, SCROLL_SPEED * sign, 0.0);
+  rotate_camera(0.0, CAMERA_ROTATE_BY * sign, 0.0);
 }
 
 unsafe fn rotate_z(cw: bool) {
   let sign = if cw {1.0} else {-1.0};
-  rotate_world(0.0, 0.0, SCROLL_SPEED * sign);
+  rotate_camera(0.0, 0.0, CAMERA_ROTATE_BY * sign);
 }
 
 // Translation - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-unsafe fn translate_world(x: f32, y: f32, z: f32) {
-  world.translation.x += x;
-  world.translation.y += y;
-  world.translation.z += z;
+unsafe fn translate_camera(x: f32, y: f32, z: f32) {
+  camera.translation.x += x;
+  camera.translation.y += y;
+  camera.translation.z += z;
 
-  update_model_matrix();
+  update_view_matrix();
 }
 
 unsafe fn move(dir: Compass) {
   match dir {
-    North => translate_world(0f32, -SCROLL_SPEED, 0f32),
-    South => translate_world(0f32,  SCROLL_SPEED, 0f32),
-    West  => translate_world( SCROLL_SPEED, 0f32, 0f32),
-    East  => translate_world(-SCROLL_SPEED, 0f32, 0f32)
+    North => translate_camera(0f32, -CAMERA_TRANSLATE_BY, 0f32),
+    South => translate_camera(0f32,  CAMERA_TRANSLATE_BY, 0f32),
+    West  => translate_camera( CAMERA_TRANSLATE_BY, 0f32, 0f32),
+    East  => translate_camera(-CAMERA_TRANSLATE_BY, 0f32, 0f32)
   }
 }
 
 // Scaling - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-unsafe fn scale_world(factor: f32) {
-  if world.scale + factor > SCALE_MIN && world.scale + factor < SCALE_MAX {
-    world.scale += factor;
+unsafe fn scale_camera(factor: f32) {
+  if camera.scale + factor > SCALE_MIN && camera.scale + factor < SCALE_MAX {
+    camera.scale += factor;
   }
 
-  update_model_matrix();
+  update_view_matrix();
 }
 
 unsafe fn zoom(dir: Zoom) {
   match dir {
-    In  => scale_world( SCALE_FACTOR),
-    Out => scale_world(-SCALE_FACTOR)
+    In  => scale_camera( CAMERA_SCALE_BY),
+    Out => scale_camera(-CAMERA_SCALE_BY)
   }
 }
 
@@ -835,7 +875,9 @@ unsafe fn handle_key_event(window: &glfw::Window, key: glfw::Key, action: glfw::
     (glfw::KeyRight, _)  => { rotate_y(false) },
 
     (glfw::KeyR, glfw::Press)      => { zoom(In) },
+    (glfw::KeyR, glfw::Repeat)     => { zoom(In) },
     (glfw::KeyF, glfw::Press)      => { zoom(Out) },
+    (glfw::KeyF, glfw::Repeat)     => { zoom(Out) },
 
     (glfw::KeyK, glfw::Press)      => { adjust_light_intensity(-0.02) },
     (glfw::KeyL, glfw::Press)      => { adjust_light_intensity(0.02) },
