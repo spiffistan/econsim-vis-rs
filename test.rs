@@ -52,6 +52,7 @@ static GS_SRC: &'static str = "test.geom";
 
 // Globals  -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
+static mut ticks: f32 = 0.0;
 static mut draw_loops: bool = false;
 
 static mut world: World = World {
@@ -67,9 +68,9 @@ static mut world: World = World {
   translation: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
 
   sunlight: DirectionalLight {
-    color:     Vec3 { x:  1.0, y:  1.0, z:  1.0 },
-    direction: Vec3 { x:  0.2, y:  0.5, z: -1.0 },
-    intensity: 1.0
+    color:     Vec3 { x:  0.8, y:  1.0, z:  1.0 },
+    direction: Vec3 { x:  0.2, y:  0.2, z:  0.2 },
+    intensity: 0.5
   }
 };
 
@@ -101,7 +102,8 @@ static mut vs_data: VertexShaderData = VertexShaderData {
   model_matrix: 0,
   rotation: 0,
   scale: 0,
-  translation: 0
+  translation: 0,
+  ticks: 0
 };
 
 static mut fs_data: FragmentShaderData = FragmentShaderData {
@@ -142,6 +144,7 @@ struct VertexShaderData {
   rotation: i32,
   scale: i32,
   translation: i32,
+  ticks: i32
 }
 
 struct FragmentShaderData {
@@ -284,29 +287,36 @@ fn initialize_normals(v: &[Vec3<GLfloat>], width: u32, height: u32) -> ~[Vec3<GL
   for row in range(0, width) {
     for col in range(0, height) {
 
-      let hr = width * row;
-      let hc = col;
 
-      let mut sum = Vec3::new(0f32, 0f32, 0f32);
-      let cur = v[hr+hc];
+      let this = width * row + col;
+      let up   = this + 1;
+      let down = this - 1;
+      let prev = this - width;
+      let next = this + width;
+
+      let mut sum: Vec3<f32> = Vec3::new(0f32, 0f32, 0f32);
+
+      let cur = v[this];
 
       if row+1 < width && col+1 < height {
-        sum = sum + (v[hr+0 + hc+1] - cur).cross(&(v[hr+1 + hc+0] - cur)).normalize();
+        sum = sum + (v[up] - v[this]).cross(&(v[next] - v[this])).normalize();
       }
 
       if row+1 < width && col > 0 && col+1 < height {
-        sum = sum + (v[hr+1 + hc+0] - cur).cross(&(v[hr+0 + hc+1] - cur)).normalize();
+        sum = sum + (v[next] - v[this]).cross(&(v[down] - v[this])).normalize();
       }
 
       if row > 0 && col > 0 && col+1 < height {
-        sum = sum + (v[hr+0 + hc+1] - cur).cross(&(v[hr+1 + hc+0] - cur)).normalize();
+        sum = sum + (v[down] - v[this]).cross(&(v[prev] - v[this])).normalize();
       }
 
       if row > 0 && col+1 < height && row+1 < width {
-        sum = sum + (v[hr+1 + hc+0] - cur).cross(&(v[hr+0 + hc+1] - cur)).normalize();
+        sum = sum + (v[prev] - v[this]).cross(&(v[up] - v[this])).normalize();
       }
 
       sum = sum.normalize();
+
+      // println!("{:?}", sum);
 
       normals.push(Vec3::new(sum.x, sum.y, sum.z));
     }
@@ -616,9 +626,9 @@ fn main() {
       gl::VertexAttribPointer(2, 3, gl::FLOAT, gl::FALSE, stride as GLint, texcoords_offset);
 
       gl::Enable(gl::DEPTH_TEST);
-      gl::Enable(gl::CULL_FACE);
-      gl::CullFace(gl::BACK);
-      gl::FrontFace(gl::CW);
+      // gl::Enable(gl::CULL_FACE);
+      // gl::CullFace(gl::BACK);
+      // gl::FrontFace(gl::CW);
     }
 
     let mut last_time = glfw::get_time();
@@ -651,6 +661,7 @@ fn main() {
       unsafe {
         let kind = if draw_loops {gl::LINE_LOOP} else {gl::TRIANGLES};
         gl::DrawElements(kind, indices.len() as GLint, gl::UNSIGNED_INT, ptr::null());
+        ticks += 0.01;
       }
 
       // Swap buffers
@@ -729,6 +740,7 @@ unsafe fn initialize_shader_data(shader_program: GLuint) {
   vs_data.model_matrix       = "M".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
   vs_data.view_matrix        = "V".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
   vs_data.projection_matrix  = "P".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
+  vs_data.ticks  = "timer".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
 
   vs_data.scale              = "scaling".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
   vs_data.translation        = "translation".with_c_str(|ptr| gl::GetUniformLocation(shader_program, ptr));
