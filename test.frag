@@ -45,7 +45,7 @@ vec4 rgba2vec4(int r, int g, int b, int a) {
 
 const vec3 light_direction = vec3(0.408248, 0.816497, 0.408248);
 const vec4 light_diffuse = vec4(0.8, 0.8, 0.8, 0.0);
-const vec4 light_ambient = vec4(0.3, 0.3, 0.3, 1.0);
+const vec4 light_ambient = vec4(0.2, 0.2, 0.2, 1.0);
 const vec4 light_specular = vec4(1.0, 1.0, 1.0, 1.0);
 
 void main() {
@@ -93,16 +93,26 @@ void main() {
 //   // out_color = color * tex;
 //   out_color = color * light_angle; // * vec4(vs_out.normal, 0);
 
+    vec3 sun = (V * vec4(0.0, 0.0, 1.5 + sin(timer / 100), 0.0)).xyz;
 
-    vec3 mv_light_direction = (V * vec4(light_direction, 0.0)).xyz,
-         normal = normalize(vs_out.normal),
-         eye = normalize(vs_out.eye),
-         reflection = reflect(mv_light_direction, normal);
+    vec3 v = vs_out.eye;
+    vec3 N = vs_out.normal;
+
+    vec3 L = normalize(sun - v);
+    vec3 E = normalize(v);
+    vec3 R = normalize(-reflect(L,N));
+
+    // vec3 mv_light_direction = (V * vec4(light_direction, 0.0)).xyz,
+    //      normal = normalize(vs_out.normal),
+    //      eye = normalize(vs_out.eye),
+    //      reflection = reflect(mv_light_direction, normal);
 
     // vec4 frag_diffuse = texture2D(texture, frag_texcoord);
-    vec4 diffuse_factor = max(-dot(normal, mv_light_direction), 0.1) * light_diffuse;
+    vec4 diffuse_factor = max(-dot(N, L), 0.0) * light_diffuse;
     vec4 ambient_diffuse_factor = diffuse_factor + light_ambient;
-    vec4 specular_factor = max(pow(-dot(reflection, eye), 20), 0.02) * light_specular;
+
+    vec4 specular_factor = pow(max(-dot(R, E), 0.0), 2.0) * light_specular;
+    specular_factor = clamp(specular_factor, 0.0, 2.0);
 
     out_color = color * (specular_factor + ambient_diffuse_factor);
 

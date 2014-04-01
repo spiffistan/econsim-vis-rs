@@ -661,7 +661,8 @@ fn main() {
       unsafe {
         let kind = if draw_loops {gl::LINE_LOOP} else {gl::TRIANGLES};
         gl::DrawElements(kind, indices.len() as GLint, gl::UNSIGNED_INT, ptr::null());
-        ticks += 0.01;
+        ticks += 1.0;
+        gl::Uniform1f(vs_data.ticks, ticks);
       }
 
       // Swap buffers
