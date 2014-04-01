@@ -4,12 +4,12 @@ layout (location = 0) in vec3 position;
 layout (location = 1) in vec3 normal;
 layout (location = 2) in vec2 texcoord;
 
-uniform mat4 M;
-uniform mat4 V;
-uniform mat4 P;
-
+uniform mat4 M; // Model
+uniform mat4 V; // View
+uniform mat4 P; // Projection
 
 out Vertex {
+  vec3 eye;
   vec3 position;
   vec2 texcoord;
   vec3 normal;
@@ -26,13 +26,16 @@ mat4 MVP(void) {
 
 void main() {
 
-  vs_out.normal = normal;
+  vec4 eye = V * M * vec4(position.xy, position.z * -1.0, 1.0);
+
+  vs_out.normal = (V * M * vec4(normal, 0.0)).xyz;
   vs_out.position = position;
+  vs_out.eye = eye.xyz;
   vs_out.texcoord = texcoord;
 
-  gl_Position = MVP() * vec4(position.xy, position.z * -1.0, 1.0);
+  gl_Position = P * eye; // MVP() * vec4(position.xy, position.z * -1.0, 1.0);
 
-
+  //
   // // Position of the vertex, in worldspace : M * position
   // Position_worldspace = (M * vec4(position,1)).xyz;
   //
@@ -48,7 +51,7 @@ void main() {
   // // Normal of the the vertex, in camera space
   // Normal_cameraspace = ( V * M * vec4(normal, 0)).xyz;
   // // Only correct if ModelMatrix does not scale the model ! Use its inverse transpose if not.
-  //
+
 
 
 }
