@@ -51,7 +51,7 @@ const vec4 light_specular = vec4(1.0, 1.0, 1.0, 1.0);
 void main() {
 
   vec4 color;
-  float z = vs_out.position.z;
+  float z = vs_out.position.z * -1.0;
   float res = 256;
 
   vec4 water = rgba2vec4(3,22,52,1);
@@ -93,10 +93,14 @@ void main() {
 //   // out_color = color * tex;
 //   out_color = color * light_angle; // * vec4(vs_out.normal, 0);
 
-    vec3 sun = (V * vec4(0.0, 0.0, 1.5 + sin(timer / 100), 0.0)).xyz;
+    float angle = timer / 50;
+    float sun_x = sin(angle) * 2;
+    float sun_z = cos(angle) * 2;
 
-    vec3 v = vs_out.eye;
-    vec3 N = vs_out.normal;
+    vec3 sun = (V * vec4(sun_x, 0.0, sun_z, 0.0)).xyz;
+
+    vec3 v = (V * M * vec4(vs_out.position.xy, vs_out.position.z * -1, 0)).xyz;
+    vec3 N = (V * M * vec4(vs_out.normal, 0)).xyz;
 
     vec3 L = normalize(sun - v);
     vec3 E = normalize(v);

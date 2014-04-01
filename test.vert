@@ -28,8 +28,8 @@ void main() {
 
   vec4 eye = V * M * vec4(position.xy, position.z * -1.0, 1.0);
 
-  vs_out.normal = (V * M * vec4(normal, 0.0)).xyz;
-  vs_out.position = position;
+  vs_out.normal = vec4(normal, 0.0).xyz;
+  vs_out.position = vec3(position.xy, position.z * -1.0);
   vs_out.eye = eye.xyz;
   vs_out.texcoord = texcoord;
 
