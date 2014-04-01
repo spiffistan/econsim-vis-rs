@@ -45,7 +45,7 @@ vec4 rgba2vec4(int r, int g, int b, int a) {
 
 const vec3 light_direction = vec3(0.408248, 0.816497, 0.408248);
 const vec4 light_diffuse = vec4(0.8, 0.8, 0.8, 0.0);
-const vec4 light_ambient = vec4(0.2, 0.2, 0.2, 1.0);
+const vec4 light_ambient = vec4(0.1, 0.1, 0.1, 1.0);
 const vec4 light_specular = vec4(1.0, 1.0, 1.0, 1.0);
 
 void main() {
@@ -54,12 +54,12 @@ void main() {
   float z = vs_out.position.z * -1.0;
   float res = 256;
 
-  vec4 water = rgba2vec4(3,22,52,1);
+  vec4 water = rgba2vec4(7,103,163,1);
   vec4 shore = rgba2vec4(3,54,73,1);
-  vec4 sand  = rgba2vec4(3,101,100,1);
+  vec4 sand  = rgba2vec4(205,179,179,1);
+  vec4 grass = rgba2vec4(0,80,9,1);
+  vec4 dirt = rgba2vec4(0,30,9,1);
 
-  vec4 grass = vec4(0.1, 0.6, 0.0, 1.0);
-  vec4 dirt  = vec4(0.8, 0.8, 0.0, 1.0);
   vec4 rock  = vec4(0.5, 0.5, 0.5, 1.0);
   vec4 snow  = vec4(1.0, 1.0, 1.0, 1.0);
 
@@ -68,7 +68,7 @@ void main() {
   float s_sand  = res * 0.045;
   float s_grass = res * 0.09;
   float s_dirt  = res * 0.60;
-  float s_rock  = res * 0.78;
+  float s_rock  = res * 0.88;
   float s_snow  = res * 0.99;
 
   color = mix(water, shore, smoothstep(s_water, s_shore, z));
@@ -93,11 +93,11 @@ void main() {
 //   // out_color = color * tex;
 //   out_color = color * light_angle; // * vec4(vs_out.normal, 0);
 
-    float angle = timer / 50;
-    float sun_x = sin(angle) * 2;
-    float sun_z = cos(angle) * 2;
+    float angle = timer / 20;
+    float sun_x = sin(angle) * 10 + 10;
+    float sun_z = cos(angle) * 10 + 10;
 
-    vec3 sun = (V * vec4(sun_x, 0.0, sun_z, 0.0)).xyz;
+    vec3 sun = (V * vec4(sun_x, 10.0, sun_z, 0.0)).xyz;
 
     vec3 v = (V * M * vec4(vs_out.position.xy, vs_out.position.z * -1, 0)).xyz;
     vec3 N = (V * M * vec4(vs_out.normal, 0)).xyz;
