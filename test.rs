@@ -626,9 +626,10 @@ fn main() {
       gl::VertexAttribPointer(2, 3, gl::FLOAT, gl::FALSE, stride as GLint, texcoords_offset);
 
       gl::Enable(gl::DEPTH_TEST);
-      // gl::Enable(gl::CULL_FACE);
-      // gl::CullFace(gl::BACK);
-      // gl::FrontFace(gl::CW);
+      gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+      gl::Enable(gl::CULL_FACE);
+      gl::CullFace(gl::BACK);
+      gl::FrontFace(gl::CW);
     }
 
     let mut last_time = glfw::get_time();
